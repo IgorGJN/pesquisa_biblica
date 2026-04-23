@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Estudo Bíblico PWA</title>
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#3b2f25" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+</head>
+<body>
+
+  <header class="app-header">
+    <h1>Estudo Bíblico</h1>
+    <p>Base local de entidades</p>
+  </header>
+
+  <main class="app-main">
+
+    <section class="card">
+      <h2 id="formTitle">Nova entidade</h2>
+
+      <form id="entityForm">
+        <input type="hidden" id="entityId" />
+
+        <label>
+          Tipo
+          <select id="type" required>
+            <option value="">Selecione</option>
+            <option value="person">Pessoa</option>
+            <option value="book">Livro</option>
+            <option value="event">Evento</option>
+            <option value="place">Lugar</option>
+            <option value="people_group">Povo / Grupo</option>
+            <option value="role">Cargo / Função</option>
+            <option value="period">Período</option>
+            <option value="theme">Tema</option>
+          </select>
+        </label>
+
+        <label>
+          Subtipo
+          <input id="subtype" placeholder="Ex: cidade, rei, batalha..." />
+        </label>
+
+        <label>
+          Nome
+          <input id="name" required placeholder="Ex: Davi, Jerusalém, 1 Samuel" />
+        </label>
+
+        <label>
+          Resumo
+          <textarea id="summary" rows="3" placeholder="Resumo curto"></textarea>
+        </label>
+
+        <label>
+          Tags
+          <input id="tags" placeholder="Ex: rei|israel|judá" />
+        </label>
+
+        <div class="actions">
+          <button type="submit" class="primary">Salvar</button>
+          <button type="button" id="cancelEdit" class="secondary hidden">Cancelar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="section-title">
+        <h2>Entidades</h2>
+        <span id="entityCount">0</span>
+      </div>
+
+      <input id="searchInput" class="search" placeholder="Buscar..." />
+
+      <div id="entityList" class="entity-list"></div>
+    </section>
+
+    <section class="card">
+  <h2>Períodos</h2>
+
+  <form id="timeSpanForm">
+    <input type="hidden" id="timeSpanId" />
+
+    <label>
+      Entidade
+      <select id="tsEntity"></select>
+    </label>
+
+    <label>
+      Tipo
+      <input id="tsKind" placeholder="Ex: vida, reinado..." />
+    </label>
+
+    <label>
+      Rótulo
+      <input id="tsLabel" placeholder="Ex: Reinado de Davi" />
+    </label>
+
+    <label>
+      Início (ano)
+      <input id="tsStartYear" type="number" />
+    </label>
+
+    <label>
+      Fim (ano)
+      <input id="tsEndYear" type="number" />
+    </label>
+
+    <label>
+      Aproximado
+      <input id="tsApprox" type="checkbox" />
+    </label>
+
+    <button type="submit" class="primary">Salvar período</button>
+  </form>
+
+  <div id="timeSpanList"></div>
+</section>
+
+<section class="card">
+  <h2>Relações</h2>
+
+  <form id="relationForm">
+    <input type="hidden" id="relationId" />
+
+    <label>
+      Origem
+      <select id="relSource"></select>
+    </label>
+
+    <label>
+      Tipo de relação
+      <select id="relType"></select>
+    </label>
+
+    <label>
+      Destino
+      <select id="relTarget"></select>
+    </label>
+
+    <label>
+      Observação
+      <input id="relNotes" />
+    </label>
+
+    <button type="submit" class="primary">Salvar relação</button>
+  </form>
+
+  <div id="relationList"></div>
+</section>
+
+<section class="card">
+  <h2>Backup</h2>
+
+  
+
+  <div class="actions">
+    <button type="button" id="backupButton" class="primary">Fazer backup</button>
+    <button type="button" id="restoreButton" class="secondary">Restaurar</button>
+  </div>
+
+  <p id="backupStatus" class="backup-status"></p>
+</section>
+
+<section class="card">
+  <h2>Arquivo local</h2>
+
+  <div class="actions">
+    <button type="button" id="exportJsonButton" class="primary">Baixar JSON</button>
+    <button type="button" id="importJsonButton" class="secondary">Importar JSON</button>
+  </div>
+
+  <input type="file" id="importJsonInput" accept="application/json" hidden />
+
+  <p id="fileStatus" class="backup-status"></p>
+</section>
+
+  </main>
+
+
+  
+  <script type="module" src="app.js"></script>
+  
+  <script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js");
+    });
+  }
+</script>
+</body>
+
+
+</html>
