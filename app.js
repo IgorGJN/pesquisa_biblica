@@ -74,6 +74,14 @@ const backupButton = document.getElementById("backupButton");
 const restoreButton = document.getElementById("restoreButton");
 const backupStatus = document.getElementById("backupStatus");
 
+const entityDetail = document.getElementById("entityDetail");
+const detailName = document.getElementById("detailName");
+const detailType = document.getElementById("detailType");
+const detailSummary = document.getElementById("detailSummary");
+const detailTimeSpans = document.getElementById("detailTimeSpans");
+const detailRelations = document.getElementById("detailRelations");
+const closeDetailButton = document.getElementById("closeDetail");
+
 // ===== INIT =====
 async function initApp() {
   await openDB();
@@ -116,6 +124,11 @@ async function initApp() {
     await renderRelations();
   }
 });
+
+if (closeDetailButton) {
+  closeDetailButton.addEventListener("click", closeEntityDetail);
+}
+
 }
 
 // ===== ENTIDADES =====
@@ -209,6 +222,7 @@ async function renderEntities(filter = "") {
       }
 
       <div class="entity-actions">
+        <button class="secondary" data-action="detail" data-id="${entity.id}">Ver</button>
         <button class="edit" data-action="edit" data-id="${entity.id}">Editar</button>
         <button class="danger" data-action="delete" data-id="${entity.id}">Excluir</button>
       </div>
@@ -228,6 +242,10 @@ async function handleEntityAction(event) {
 
   const entity = entitiesCache.find((item) => item.id === id);
   if (!entity) return;
+
+  if (action === "detail") {
+  await openEntityDetail(id);
+}
 
   if (action === "edit") {
     fillForm(entity);
@@ -567,6 +585,94 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+async function openEntityDetail(entityId) {
+  if (!entityDetail) return;
+
+  const entities = await listEntities();
+  const timeSpans = await listTimeSpans();
+  const relations = await listRelations();
+  const relationTypes = await getAllRecords(STORES.relation_types);
+
+  const entity = entities.find((item) => item.id === entityId);
+  if (!entity) return;
+
+  const entityMap = {};
+  entities.forEach((item) => {
+    entityMap[item.id] = item;
+  });
+
+  const relationTypeMap = {};
+  relationTypes.forEach((item) => {
+    relationTypeMap[item.key] = item;
+  });
+
+  detailName.textContent = entity.name;
+  detailType.textContent = `${entity.type}${entity.subtype ? " / " + entity.subtype : ""}`;
+  detailSummary.textContent = entity.summary || "Sem resumo.";
+
+  const relatedTimeSpans = timeSpans.filter((ts) => ts.entity_id === entityId);
+
+  detailTimeSpans.innerHTML = "";
+
+  if (relatedTimeSpans.length === 0) {
+    detailTimeSpans.innerHTML = `<p class="empty">Nenhum período registrado.</p>`;
+  } else {
+    relatedTimeSpans.forEach((ts) => {
+      const div = document.createElement("div");
+      div.className = "mini-item";
+
+      div.innerHTML = `
+        <strong>${escapeHtml(ts.label || ts.kind)}</strong>
+        <p>${escapeHtml(ts.start_year || "?")} → ${escapeHtml(ts.end_year || "?")}</p>
+      `;
+
+      detailTimeSpans.appendChild(div);
+    });
+  }
+
+  const relatedRelations = relations.filter((rel) => {
+    return rel.source_id === entityId || rel.target_id === entityId;
+  });
+
+  detailRelations.innerHTML = "";
+
+  if (relatedRelations.length === 0) {
+    detailRelations.innerHTML = `<p class="empty">Nenhuma relação registrada.</p>`;
+  } else {
+    relatedRelations.forEach((rel) => {
+      const source = entityMap[rel.source_id]?.name || rel.source_id;
+      const target = entityMap[rel.target_id]?.name || rel.target_id;
+      const relLabel =
+        relationTypeMap[rel.relation_type_key]?.label || rel.relation_type_key;
+
+      const div = document.createElement("div");
+      div.className = "mini-item";
+
+      div.innerHTML = `
+        <strong>${escapeHtml(source)}</strong>
+        → ${escapeHtml(relLabel)} →
+        <strong>${escapeHtml(target)}</strong>
+        ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
+      `;
+
+      detailRelations.appendChild(div);
+    });
+  }
+
+  entityDetail.classList.remove("hidden");
+
+  entityDetail.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
+function closeEntityDetail() {
+  if (entityDetail) {
+    entityDetail.classList.add("hidden");
+  }
 }
 
 initApp().catch((error) => {
