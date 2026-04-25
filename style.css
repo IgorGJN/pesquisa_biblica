@@ -210,3 +210,23 @@ button {
   color: #5d5147;
   line-height: 1.5;
 }
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+}
+
+.tabs button {
+  flex: 1;
+  border: 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #e7ded2;
+  font-weight: 600;
+}
+
+.tabs button.active {
+  background: #7b4f2c;
+  color: white;
+}

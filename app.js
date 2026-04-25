@@ -82,6 +82,13 @@ const detailTimeSpans = document.getElementById("detailTimeSpans");
 const detailRelations = document.getElementById("detailRelations");
 const closeDetailButton = document.getElementById("closeDetail");
 
+const filterType = document.getElementById("filterType");
+
+const tabs = document.querySelectorAll(".tabs button");
+const tabEntities = document.getElementById("tab-entities");
+const tabTime = document.getElementById("tab-time");
+const tabRelations = document.getElementById("tab-relations");
+
 // ===== INIT =====
 async function initApp() {
   await openDB();
@@ -129,6 +136,16 @@ if (closeDetailButton) {
   closeDetailButton.addEventListener("click", closeEntityDetail);
 }
 
+if (filterType) {
+  filterType.addEventListener("change", () => {
+    renderEntities(searchInput?.value || "");
+  });
+}
+
+tabs.forEach((tab) => {
+  tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+});
+
 }
 
 // ===== ENTIDADES =====
@@ -175,6 +192,7 @@ async function renderEntities(filter = "") {
   entitiesCache = await listEntities();
 
   const normalizedFilter = filter.toLowerCase().trim();
+  const typeFilter = filterType?.value || "";
 
   const filtered = entitiesCache.filter((entity) => {
     const text = [
@@ -187,7 +205,10 @@ async function renderEntities(filter = "") {
       .join(" ")
       .toLowerCase();
 
-    return text.includes(normalizedFilter);
+    const matchesSearch = text.includes(normalizedFilter);
+    const matchesType = !typeFilter || entity.type === typeFilter;
+
+    return matchesSearch && matchesType;
   });
 
   entityCount.textContent = filtered.length;
@@ -673,6 +694,20 @@ function closeEntityDetail() {
   if (entityDetail) {
     entityDetail.classList.add("hidden");
   }
+}
+
+function switchTab(tab) {
+  tabs.forEach((t) => t.classList.remove("active"));
+
+  document.querySelector(`[data-tab="${tab}"]`).classList.add("active");
+
+  tabEntities.classList.add("hidden");
+  tabTime.classList.add("hidden");
+  tabRelations.classList.add("hidden");
+
+  if (tab === "entities") tabEntities.classList.remove("hidden");
+  if (tab === "time") tabTime.classList.remove("hidden");
+  if (tab === "relations") tabRelations.classList.remove("hidden");
 }
 
 initApp().catch((error) => {
