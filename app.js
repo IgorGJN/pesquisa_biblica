@@ -91,6 +91,144 @@ const tabRelations = document.getElementById("tab-relations");
 
 const filterYear = document.getElementById("filterYear");
 
+const tabTimeline = document.getElementById("tab-timeline");
+const timelineContainer = document.getElementById("timelineContainer");
+const refreshTimelineButton = document.getElementById("refreshTimeline");
+let timelineInstance = null;
+const timelineTypeFilter = document.getElementById("timelineTypeFilter");
+
+function formatYear(year) {
+  if (year === null || year === undefined || year === "") return "?";
+
+  const y = Number(year);
+
+  if (y < 0) {
+    return `${Math.abs(y)} a.C.`;
+  }
+
+  return `${y} d.C.`;
+}
+
+function formatPeriod(start, end) {
+  if (!start && !end) return "";
+
+  if (start && end) {
+    return `${formatYear(start)} → ${formatYear(end)}`;
+  }
+
+  if (start && !end) {
+    return `desde ${formatYear(start)}`;
+  }
+
+  if (!start && end) {
+    return `até ${formatYear(end)}`;
+  }
+
+  return "";
+}
+
+async function renderTimeline() {
+  if (!timelineContainer) return;
+
+  const entities = await listEntities();
+  const timeSpans = await listTimeSpans();
+
+  const typeFilter = timelineTypeFilter?.value || "";
+
+  const filteredEntities = typeFilter
+    ? entities.filter((entity) => entity.type === typeFilter)
+    : entities;
+
+  const filteredEntityIds = new Set(
+    filteredEntities.map((entity) => entity.id)
+  );
+
+  const entityMap = {};
+  entities.forEach((entity) => {
+    entityMap[entity.id] = entity;
+  });
+
+  const groups = filteredEntities.map((entity) => ({
+    id: entity.id,
+    content: escapeHtml(entity.name)
+  }));
+
+  const items = timeSpans
+    .filter((ts) => filteredEntityIds.has(ts.entity_id))
+    .filter((ts) => ts.start_year !== "" || ts.end_year !== "")
+    .map((ts) => {
+      const entity = entityMap[ts.entity_id];
+
+      const startYear =
+        ts.start_year !== "" ? Number(ts.start_year) : Number(ts.end_year);
+
+      const endYear =
+        ts.end_year !== "" ? Number(ts.end_year) : Number(ts.start_year);
+
+      if (Number.isNaN(startYear) || Number.isNaN(endYear)) return null;
+
+      const isRange = startYear !== endYear;
+
+      return {
+        id: ts.id,
+        group: ts.entity_id,
+        content: escapeHtml(ts.label || ts.kind || entity?.name || "Período"),
+        start: yearToVisDate(startYear),
+        end: isRange ? yearToVisDate(endYear) : undefined,
+        title: `${escapeHtml(entity?.name || "")}<br>${escapeHtml(
+          formatPeriod(ts.start_year, ts.end_year)
+        )}`,
+        className: `timeline-${entity?.type || "default"}`
+      };
+    })
+    .filter(Boolean);
+
+  timelineContainer.innerHTML = "";
+
+  if (items.length === 0) {
+    timelineContainer.innerHTML = `<p class="empty">Nenhum período com data cadastrado.</p>`;
+    return;
+  }
+
+  const options = {
+    stack: true,
+    horizontalScroll: true,
+    zoomKey: "ctrlKey",
+    orientation: "top",
+    groupOrder: "content",
+    tooltip: {
+      followMouse: true
+    },
+    margin: {
+      item: 10,
+      axis: 10
+    }
+  };
+
+  timelineInstance = new vis.Timeline(
+    timelineContainer,
+    new vis.DataSet(items),
+    new vis.DataSet(groups),
+    options
+  );
+
+  timelineInstance.on("select", async (props) => {
+    if (!props.items.length) return;
+
+    const selected = items.find((item) => item.id === props.items[0]);
+    if (!selected?.group) return;
+
+    await openEntityDetail(selected.group);
+  });
+}
+
+function yearToVisDate(year) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, 0, 1);
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
+
 // ===== INIT =====
 async function initApp() {
   await openDB();
@@ -154,6 +292,13 @@ if (filterYear) {
   });
 }
 
+if (refreshTimelineButton) {
+  refreshTimelineButton.addEventListener("click", renderTimeline);
+}
+if (timelineTypeFilter) {
+  timelineTypeFilter.addEventListener("change", renderTimeline);
+}
+
 }
 
 // ===== ENTIDADES =====
@@ -205,6 +350,16 @@ async function renderEntities(filter = "") {
 
   const timeSpans = await listTimeSpans();
 
+  const entityPeriodsMap = {};
+
+  timeSpans.forEach((ts) => {
+    if (!entityPeriodsMap[ts.entity_id]) {
+      entityPeriodsMap[ts.entity_id] = [];
+    }
+
+    entityPeriodsMap[ts.entity_id].push(ts);
+  });
+
   const filtered = entitiesCache.filter((entity) => {
     const text = [
       entity.name,
@@ -222,7 +377,7 @@ async function renderEntities(filter = "") {
     let matchesYear = true;
 
     if (yearFilter !== null) {
-      const entityPeriods = timeSpans.filter((ts) => ts.entity_id === entity.id);
+      const entityPeriods = entityPeriodsMap[entity.id] || [];
 
       matchesYear = entityPeriods.some((ts) => {
         const start = ts.start_year !== "" ? Number(ts.start_year) : null;
@@ -261,10 +416,20 @@ async function renderEntities(filter = "") {
     const item = document.createElement("article");
     item.className = "entity-item";
 
+    const periods = entityPeriodsMap[entity.id] || [];
+
+    let periodText = "";
+
+    if (periods.length > 0) {
+      const main = periods[0];
+      periodText = formatPeriod(main.start_year, main.end_year);
+    }
+
     item.innerHTML = `
       <div class="entity-top">
         <div>
           <div class="entity-name">${escapeHtml(entity.name)}</div>
+          ${periodText ? `<div class="entity-period">${escapeHtml(periodText)}</div>` : ""}
           ${
             entity.subtype
               ? `<div class="entity-summary">${escapeHtml(entity.subtype)}</div>`
@@ -294,6 +459,7 @@ async function renderEntities(filter = "") {
     button.addEventListener("click", handleEntityAction);
   });
 }
+
 
 async function handleEntityAction(event) {
   const id = event.target.dataset.id;
@@ -407,7 +573,7 @@ async function renderTimeSpans() {
 
     div.innerHTML = `
       <strong>${escapeHtml(ts.label || ts.kind)}</strong>
-      <p>${escapeHtml(entityName)}: ${ts.start_year || "?"} → ${ts.end_year || "?"}</p>
+      <p>${escapeHtml(entityName)}: ${escapeHtml(formatPeriod(ts.start_year, ts.end_year))}</p>
 
       <div class="entity-actions">
         <button class="edit" data-action="edit" data-id="${ts.id}">Editar</button>
@@ -684,7 +850,7 @@ async function openEntityDetail(entityId) {
 
       div.innerHTML = `
         <strong>${escapeHtml(ts.label || ts.kind)}</strong>
-        <p>${escapeHtml(ts.start_year || "?")} → ${escapeHtml(ts.end_year || "?")}</p>
+        <p>${escapeHtml(formatPeriod(ts.start_year, ts.end_year))}</p>
       `;
 
       detailTimeSpans.appendChild(div);
@@ -737,15 +903,22 @@ function closeEntityDetail() {
 function switchTab(tab) {
   tabs.forEach((t) => t.classList.remove("active"));
 
-  document.querySelector(`[data-tab="${tab}"]`).classList.add("active");
+  const activeTab = document.querySelector(`[data-tab="${tab}"]`);
+  if (activeTab) activeTab.classList.add("active");
 
-  tabEntities.classList.add("hidden");
-  tabTime.classList.add("hidden");
-  tabRelations.classList.add("hidden");
+  if (tabEntities) tabEntities.classList.add("hidden");
+  if (tabTime) tabTime.classList.add("hidden");
+  if (tabRelations) tabRelations.classList.add("hidden");
+  if (tabTimeline) tabTimeline.classList.add("hidden");
 
-  if (tab === "entities") tabEntities.classList.remove("hidden");
-  if (tab === "time") tabTime.classList.remove("hidden");
-  if (tab === "relations") tabRelations.classList.remove("hidden");
+  if (tab === "entities" && tabEntities) tabEntities.classList.remove("hidden");
+  if (tab === "time" && tabTime) tabTime.classList.remove("hidden");
+  if (tab === "relations" && tabRelations) tabRelations.classList.remove("hidden");
+
+  if (tab === "timeline" && tabTimeline) {
+    tabTimeline.classList.remove("hidden");
+    renderTimeline();
+  }
 }
 
 initApp().catch((error) => {

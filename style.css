@@ -230,3 +230,68 @@ button {
   background: #7b4f2c;
   color: white;
 }
+
+.entity-period {
+  font-size: 0.8rem;
+  color: #7a6a5c;
+  margin-top: 2px;
+}
+
+/* TIMELINE */
+
+.timeline-card {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.vis-timeline-box {
+  width: 100%;
+  height: 420px;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.vis-timeline {
+  border: 1px solid #e2d5c3;
+  border-radius: 14px;
+  font-family: inherit;
+}
+
+.vis-item {
+  border-radius: 999px;
+  border: none;
+  color: white;
+  font-size: 0.78rem;
+  padding: 4px 8px;
+}
+
+.vis-item.timeline-person {
+  background: #6f7f3f;
+}
+
+.vis-item.timeline-event {
+  background: #8f4f2f;
+}
+
+.vis-item.timeline-book {
+  background: #4f6f8f;
+}
+
+.vis-item.timeline-place {
+  background: #7b4f8f;
+}
+
+.vis-item.timeline-default {
+  background: #7b4f2c;
+}
+
+.vis-label {
+  font-size: 0.82rem;
+}
+
+.vis-time-axis .vis-text {
+  color: #5d5147;
+  font-size: 0.75rem;
+}

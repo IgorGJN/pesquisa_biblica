@@ -1,6 +1,6 @@
 // seed.js
 
-import { addRecord, getAllRecords, STORES } from "./db.js";
+import { putRecord, getAllRecords, STORES } from "./db.js";
 
 const DEFAULT_RELATION_TYPES = [
   {
@@ -9,7 +9,8 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "person",
     target_types: "place",
     allow_time: false,
-    category: "vida"
+    category: "vida",
+    active: true
   },
   {
     key: "morreu_em",
@@ -17,7 +18,8 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "person",
     target_types: "place",
     allow_time: false,
-    category: "vida"
+    category: "vida",
+    active: true
   },
   {
     key: "filho_de",
@@ -25,7 +27,8 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "person",
     target_types: "person",
     allow_time: false,
-    category: "familia"
+    category: "familia",
+    active: true
   },
   {
     key: "conjuge_de",
@@ -33,7 +36,8 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "person",
     target_types: "person",
     allow_time: true,
-    category: "familia"
+    category: "familia",
+    active: true
   },
   {
     key: "participou_de",
@@ -41,7 +45,8 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "person|people_group",
     target_types: "event",
     allow_time: false,
-    category: "evento"
+    category: "evento",
+    active: true
   },
   {
     key: "ocorreu_em",
@@ -49,15 +54,44 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "event",
     target_types: "place",
     allow_time: false,
-    category: "evento"
+    category: "evento",
+    active: true
   },
   {
     key: "aparece_em",
     label: "aparece em",
-    source_types: "person|event|place",
+    source_types: "person|event|place|people_group",
     target_types: "book",
     allow_time: false,
-    category: "texto"
+    category: "texto",
+    active: true
+  },
+  {
+    key: "registrado_em",
+    label: "registrado em",
+    source_types: "event",
+    target_types: "book",
+    allow_time: false,
+    category: "texto",
+    active: true
+  },
+  {
+    key: "escreveu",
+    label: "escreveu",
+    source_types: "person",
+    target_types: "book",
+    allow_time: true,
+    category: "autoria",
+    active: true
+  },
+  {
+    key: "atribuido_a",
+    label: "atribuído a",
+    source_types: "book|text",
+    target_types: "person",
+    allow_time: false,
+    category: "autoria",
+    active: true
   },
   {
     key: "exerceu_papel",
@@ -65,7 +99,8 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "person",
     target_types: "role",
     allow_time: true,
-    category: "funcao"
+    category: "funcao",
+    active: true
   },
   {
     key: "reinou_em",
@@ -73,7 +108,8 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "person",
     target_types: "place|people_group",
     allow_time: true,
-    category: "governo"
+    category: "governo",
+    active: true
   },
   {
     key: "fica_em",
@@ -81,23 +117,20 @@ const DEFAULT_RELATION_TYPES = [
     source_types: "place",
     target_types: "place",
     allow_time: false,
-    category: "geografia"
+    category: "geografia",
+    active: true
   }
 ];
 
 export async function seedRelationTypes() {
   const existing = await getAllRecords(STORES.relation_types, true);
-
-  if (existing.length > 0) {
-    return; // já foi populado
-  }
+  const existingMap = new Map(existing.map((item) => [item.key, item]));
 
   for (const rel of DEFAULT_RELATION_TYPES) {
-    await addRecord(STORES.relation_types, {
-      ...rel,
-      active: true
-    });
-  }
+    const current = existingMap.get(rel.key);
 
-  console.log("Relation types seeded");
+    if (!current) {
+      await putRecord(STORES.relation_types, rel);
+    }
+  }
 }
