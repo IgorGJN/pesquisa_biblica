@@ -12,7 +12,7 @@ export async function backupToGoogleSheets(appsScriptUrl) {
   const payload = {
     action: "backup_full",
     device_id: getDeviceId(),
-    app_version: "0.1.0",
+    app_version: "0.1.1",
     payload_version: "1",
     data: {
       entities: data.entities || [],

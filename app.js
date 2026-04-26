@@ -89,6 +89,8 @@ const tabEntities = document.getElementById("tab-entities");
 const tabTime = document.getElementById("tab-time");
 const tabRelations = document.getElementById("tab-relations");
 
+const filterYear = document.getElementById("filterYear");
+
 // ===== INIT =====
 async function initApp() {
   await openDB();
@@ -146,6 +148,12 @@ tabs.forEach((tab) => {
   tab.addEventListener("click", () => switchTab(tab.dataset.tab));
 });
 
+if (filterYear) {
+  filterYear.addEventListener("input", () => {
+    renderEntities(searchInput?.value || "");
+  });
+}
+
 }
 
 // ===== ENTIDADES =====
@@ -193,6 +201,9 @@ async function renderEntities(filter = "") {
 
   const normalizedFilter = filter.toLowerCase().trim();
   const typeFilter = filterType?.value || "";
+  const yearFilter = filterYear?.value ? Number(filterYear.value) : null;
+
+  const timeSpans = await listTimeSpans();
 
   const filtered = entitiesCache.filter((entity) => {
     const text = [
@@ -208,7 +219,34 @@ async function renderEntities(filter = "") {
     const matchesSearch = text.includes(normalizedFilter);
     const matchesType = !typeFilter || entity.type === typeFilter;
 
-    return matchesSearch && matchesType;
+    let matchesYear = true;
+
+    if (yearFilter !== null) {
+      const entityPeriods = timeSpans.filter((ts) => ts.entity_id === entity.id);
+
+      matchesYear = entityPeriods.some((ts) => {
+        const start = ts.start_year !== "" ? Number(ts.start_year) : null;
+        const end = ts.end_year !== "" ? Number(ts.end_year) : null;
+
+        if (start === null && end === null) return false;
+
+        if (start !== null && end !== null) {
+          return yearFilter >= start && yearFilter <= end;
+        }
+
+        if (start !== null && end === null) {
+          return yearFilter >= start;
+        }
+
+        if (start === null && end !== null) {
+          return yearFilter <= end;
+        }
+
+        return false;
+      });
+    }
+
+    return matchesSearch && matchesType && matchesYear;
   });
 
   entityCount.textContent = filtered.length;
