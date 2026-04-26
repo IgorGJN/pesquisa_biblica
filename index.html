@@ -8,271 +8,318 @@
 
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#3b2f25" />
-<link rel="apple-touch-icon" href="icons/icon-192.png" />
-<link  href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css" rel="stylesheet"/>
-<script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
-</head>
-<body>
+  <meta name="theme-color" content="#3b2f25" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
 
+  <link
+    href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css"
+    rel="stylesheet"
+  />
+
+  <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
+</head>
+
+<body>
   <header class="app-header">
-    <div class="tabs">
-  <button data-tab="entities" class="tab active">Entidades</button>
-  <button data-tab="time">Períodos</button>
-  <button data-tab="relations">Relações</button>
-  <button data-tab="timeline">Timeline</button>
-</div>
     <h1>Estudo Bíblico</h1>
     <p>Base local de entidades</p>
+
+    <div class="tabs">
+      <button data-tab="entities" class="tab active">Entidades</button>
+      <button data-tab="time">Períodos</button>
+      <button data-tab="relations">Relações</button>
+      <button data-tab="timeline">Timeline</button>
+    </div>
   </header>
 
   <main class="app-main">
-    <div id="tab-entities">
-  <!-- entidade + lista -->
-   <section class="card">
-      <h2 id="formTitle">Nova entidade</h2>
 
-      <form id="entityForm">
-        <input type="hidden" id="entityId" />
+    <!-- ========================= -->
+    <!-- ABA ENTIDADES -->
+    <!-- ========================= -->
+    <div id="tab-entities">
+      <section class="card">
+        <h2 id="formTitle">Nova entidade</h2>
+
+        <form id="entityForm">
+          <input type="hidden" id="entityId" />
+
+          <label>
+            Tipo
+            <select id="type" required>
+              <option value="">Selecione</option>
+              <option value="person">Pessoa</option>
+              <option value="book">Livro</option>
+              <option value="event">Evento</option>
+              <option value="place">Lugar</option>
+              <option value="people_group">Povo / Grupo</option>
+              <option value="role">Cargo / Função</option>
+              <option value="period">Período</option>
+              <option value="theme">Tema</option>
+            </select>
+          </label>
+
+          <label>
+            Subtipo
+            <input id="subtype" placeholder="Ex: cidade, rei, batalha..." />
+          </label>
+
+          <label>
+            Nome
+            <input id="name" required placeholder="Ex: Davi, Jerusalém, 1 Samuel" />
+          </label>
+
+          <label>
+            Resumo
+            <textarea id="summary" rows="3" placeholder="Resumo curto"></textarea>
+          </label>
+
+          <label>
+            Tags
+            <input id="tags" placeholder="Ex: rei|israel|judá" />
+          </label>
+
+          <div class="actions">
+            <button type="submit" class="primary">Salvar</button>
+            <button type="button" id="cancelEdit" class="secondary hidden">Cancelar</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <h2>Entidades</h2>
+          <span id="entityCount">0</span>
+        </div>
+
+        <input id="searchInput" class="search" placeholder="Buscar..." />
+
+        <select id="filterType" class="search">
+          <option value="">Todos os tipos</option>
+          <option value="person">Pessoa</option>
+          <option value="book">Livro</option>
+          <option value="event">Evento</option>
+          <option value="place">Lugar</option>
+          <option value="people_group">Povo / Grupo</option>
+          <option value="role">Cargo</option>
+          <option value="period">Período</option>
+          <option value="theme">Tema</option>
+        </select>
+
+        <input
+          id="filterYear"
+          type="number"
+          class="search"
+          placeholder="Filtrar por ano (ex: -1000)"
+        />
+
+        <div id="entityList" class="entity-list"></div>
+      </section>
+    </div>
+
+    <!-- ========================= -->
+    <!-- ABA PERÍODOS -->
+    <!-- ========================= -->
+    <div id="tab-time" class="hidden">
+      <section class="card">
+        <h2>Períodos</h2>
+
+        <form id="timeSpanForm">
+          <input type="hidden" id="timeSpanId" />
+
+          <label>
+            Entidade
+            <select id="tsEntity"></select>
+          </label>
+
+          <label>
+            Tipo
+            <input id="tsKind" placeholder="Ex: vida, reinado..." />
+          </label>
+
+          <label>
+            Rótulo
+            <input id="tsLabel" placeholder="Ex: Reinado de Davi" />
+          </label>
+
+          <label>
+            Início (ano)
+            <input id="tsStartYear" type="number" />
+          </label>
+
+          <label>
+            Fim (ano)
+            <input id="tsEndYear" type="number" />
+          </label>
+
+          <label>
+            Aproximado
+            <input id="tsApprox" type="checkbox" />
+          </label>
+
+          <button type="submit" class="primary">Salvar período</button>
+        </form>
+
+        <div id="timeSpanList"></div>
+      </section>
+    </div>
+
+    <!-- ========================= -->
+    <!-- ABA RELAÇÕES -->
+    <!-- ========================= -->
+    <div id="tab-relations" class="hidden">
+      <section class="card">
+        <h2>Relações</h2>
+
+        <form id="relationForm">
+          <input type="hidden" id="relationId" />
+
+          <label>
+            Origem
+            <select id="relSource"></select>
+          </label>
+
+          <label>
+            Tipo de relação
+            <select id="relType"></select>
+          </label>
+
+          <label>
+            Destino
+            <select id="relTarget"></select>
+          </label>
+
+          <label>
+            Observação
+            <input id="relNotes" />
+          </label>
+
+          <button type="submit" class="primary">Salvar relação</button>
+        </form>
+
+        <div id="relationList"></div>
+      </section>
+    </div>
+
+    <!-- ========================= -->
+    <!-- ABA TIMELINE -->
+    <!-- ========================= -->
+    <div id="tab-timeline" class="hidden">
+      <section class="card timeline-card">
+        <div class="section-title">
+          <h2>Timeline</h2>
+          <button type="button" id="refreshTimeline" class="secondary">Atualizar</button>
+        </div>
 
         <label>
-          Tipo
-          <select id="type" required>
-            <option value="">Selecione</option>
-            <option value="person">Pessoa</option>
-            <option value="book">Livro</option>
-            <option value="event">Evento</option>
-            <option value="place">Lugar</option>
-            <option value="people_group">Povo / Grupo</option>
-            <option value="role">Cargo / Função</option>
-            <option value="period">Período</option>
-            <option value="theme">Tema</option>
+          Filtrar timeline
+          <select id="timelineTypeFilter">
+            <option value="">Todos</option>
+            <option value="person">Pessoas</option>
+            <option value="event">Eventos</option>
+            <option value="book">Livros</option>
+            <option value="place">Lugares</option>
+            <option value="people_group">Povos / Grupos</option>
+            <option value="role">Cargos / Funções</option>
+            <option value="period">Períodos</option>
+            <option value="theme">Temas</option>
           </select>
         </label>
 
-        <label>
-          Subtipo
-          <input id="subtype" placeholder="Ex: cidade, rei, batalha..." />
-        </label>
+        <div id="timelineContainer" class="vis-timeline-box"></div>
+      </section>
+    </div>
 
-        <label>
-          Nome
-          <input id="name" required placeholder="Ex: Davi, Jerusalém, 1 Samuel" />
-        </label>
-
-        <label>
-          Resumo
-          <textarea id="summary" rows="3" placeholder="Resumo curto"></textarea>
-        </label>
-
-        <label>
-          Tags
-          <input id="tags" placeholder="Ex: rei|israel|judá" />
-        </label>
-
-        <div class="actions">
-          <button type="submit" class="primary">Salvar</button>
-          <button type="button" id="cancelEdit" class="secondary hidden">Cancelar</button>
-        </div>
-      </form>
-    </section>
-
-<select id="filterType" class="search">
-  <option value="">Todos os tipos</option>
-  <option value="person">Pessoa</option>
-  <option value="book">Livro</option>
-  <option value="event">Evento</option>
-  <option value="place">Lugar</option>
-  <option value="people_group">Povo / Grupo</option>
-  <option value="role">Cargo</option>
-</select>
-
-<input id="filterYear" type="number" class="search" placeholder="Filtrar por ano (ex: -1000)" />
-
-
+    <!-- ========================= -->
+    <!-- BACKUP -->
+    <!-- ========================= -->
     <section class="card">
-      <div class="section-title">
-        <h2>Entidades</h2>
-        <span id="entityCount">0</span>
+      <h2>Backup</h2>
+
+      <div class="actions">
+        <button type="button" id="backupButton" class="primary">Fazer backup</button>
+        <button type="button" id="restoreButton" class="secondary">Restaurar</button>
       </div>
 
-      <input id="searchInput" class="search" placeholder="Buscar..." />
-
-      <div id="entityList" class="entity-list"></div>
+      <p id="backupStatus" class="backup-status"></p>
     </section>
 
-    <section id="entityDetail" class="card hidden">
-  <div class="section-title">
-    <h2 id="detailName">Detalhe</h2>
-    <button type="button" id="closeDetail" class="secondary">Fechar</button>
-  </div>
+    <section class="card">
+      <h2>Arquivo local</h2>
 
-  <p id="detailType"></p>
-  <p id="detailSummary"></p>
+      <div class="actions">
+        <button type="button" id="exportJsonButton" class="primary">Baixar JSON</button>
+        <button type="button" id="importJsonButton" class="secondary">Importar JSON</button>
+      </div>
 
-  <h3>Períodos</h3>
-  <div id="detailTimeSpans"></div>
+      <input type="file" id="importJsonInput" accept="application/json" hidden />
 
-  <h3>Relações</h3>
-  <div id="detailRelations"></div>
-</section>
-</div>
-
-<div id="tab-time" class="hidden">
-  <!-- períodos -->
-   <section class="card">
-  <h2>Períodos</h2>
-
-  <form id="timeSpanForm">
-    <input type="hidden" id="timeSpanId" />
-
-    <label>
-      Entidade
-      <select id="tsEntity"></select>
-    </label>
-
-    <label>
-      Tipo
-      <input id="tsKind" placeholder="Ex: vida, reinado..." />
-    </label>
-
-    <label>
-      Rótulo
-      <input id="tsLabel" placeholder="Ex: Reinado de Davi" />
-    </label>
-
-    <label>
-      Início (ano)
-      <input id="tsStartYear" type="number" />
-    </label>
-
-    <label>
-      Fim (ano)
-      <input id="tsEndYear" type="number" />
-    </label>
-
-    <label>
-      Aproximado
-      <input id="tsApprox" type="checkbox" />
-    </label>
-
-    <button type="submit" class="primary">Salvar período</button>
-  </form>
-
-  <div id="timeSpanList"></div>
-</section>
-</div>
-
-<div id="tab-relations" class="hidden">
-  <!-- relações -->
-   <section class="card">
-  <h2>Relações</h2>
-
-  <form id="relationForm">
-    <input type="hidden" id="relationId" />
-
-    <label>
-      Origem
-      <select id="relSource"></select>
-    </label>
-
-    <label>
-      Tipo de relação
-      <select id="relType"></select>
-    </label>
-
-    <label>
-      Destino
-      <select id="relTarget"></select>
-    </label>
-
-    <label>
-      Observação
-      <input id="relNotes" />
-    </label>
-
-    <button type="submit" class="primary">Salvar relação</button>
-  </form>
-
-  <div id="relationList"></div>
-</section>
-</div>
-
-
-
-<div id="tab-timeline" class="hidden">
-  <section class="card timeline-card">
-    <div class="section-title">
-      <h2>Timeline</h2>
-      <button type="button" id="refreshTimeline" class="secondary">Atualizar</button>
-    </div>
-<label>
-  Filtrar timeline
-  <select id="timelineTypeFilter">
-    <option value="">Todos</option>
-    <option value="person">Pessoas</option>
-    <option value="event">Eventos</option>
-    <option value="book">Livros</option>
-    <option value="place">Lugares</option>
-    <option value="people_group">Povos / Grupos</option>
-    <option value="role">Cargos / Funções</option>
-    <option value="period">Períodos</option>
-    <option value="theme">Temas</option>
-  </select>
-</label>
-    <div id="timelineContainer" class="vis-timeline-box"></div>
-  </section>
-</div>
-
-    
-
-    
-
-
-
-<section class="card">
-  <h2>Backup</h2>
-
-  
-
-  <div class="actions">
-    <button type="button" id="backupButton" class="primary">Fazer backup</button>
-    <button type="button" id="restoreButton" class="secondary">Restaurar</button>
-  </div>
-
-  <p id="backupStatus" class="backup-status"></p>
-</section>
-
-<section class="card">
-  <h2>Arquivo local</h2>
-
-  <div class="actions">
-    <button type="button" id="exportJsonButton" class="primary">Baixar JSON</button>
-    <button type="button" id="importJsonButton" class="secondary">Importar JSON</button>
-  </div>
-
-  <input type="file" id="importJsonInput" accept="application/json" hidden />
-
-  <p id="fileStatus" class="backup-status"></p>
-</section>
-
+      <p id="fileStatus" class="backup-status"></p>
+    </section>
   </main>
 
+  <!-- ========================= -->
+  <!-- MODAL PERFIL DA ENTIDADE -->
+  <!-- ========================= -->
+  <div id="entityDetailModal" class="modal hidden">
+    <div class="modal-content large">
+      <button type="button" id="closeDetail" class="close">✕</button>
 
-  
-  <script type="module" src="app.js"></script>
-  
+      <header class="detail-header">
+        <div>
+          <h2 id="detailName">Detalhe</h2>
+          <span id="detailType" class="badge"></span>
+        </div>
+
+        <button type="button" id="editEntityFromDetail" class="secondary">Editar</button>
+      </header>
+
+      <p id="detailSummary" class="muted"></p>
+
+      <input type="hidden" id="detailEntityId" />
+
+      <section class="detail-section">
+        <div class="section-title">
+          <h3>Períodos</h3>
+        </div>
+
+        <form id="detailTimeForm" class="inline-form">
+          <input id="detailTsKind" placeholder="Tipo (vida, reinado...)" />
+          <input id="detailTsLabel" placeholder="Rótulo" />
+          <input id="detailTsStart" type="number" placeholder="Início" />
+          <input id="detailTsEnd" type="number" placeholder="Fim" />
+          <button type="submit" class="primary small">Adicionar</button>
+        </form>
+
+        <div id="detailTimeList"></div>
+      </section>
+
+      <section class="detail-section">
+        <div class="section-title">
+          <h3>Relações</h3>
+        </div>
+
+        <form id="detailRelationForm" class="inline-form">
+          <select id="detailRelationType"></select>
+          <select id="detailRelationTarget"></select>
+          <button type="submit" class="primary small">Adicionar</button>
+        </form>
+
+        <div id="detailRelationList"></div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="app.js?v=0.3"></script>
+
   <script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js");
-    });
-  }
-</script>
-
-<script type="module" src="app.js?v=0.2"></script>
-
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").then((reg) => {
+          reg.update();
+        });
+      });
+    }
+  </script>
 </body>
-
-
 </html>

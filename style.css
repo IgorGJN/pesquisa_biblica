@@ -295,3 +295,69 @@ button {
   color: #5d5147;
   font-size: 0.75rem;
 }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: #fffaf2;
+  width: 95%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.modal-content.large {
+  max-width: 1000px;
+}
+
+.close {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-section {
+  margin-top: 18px;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.badge {
+  background: #e2d5c3;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.muted {
+  color: #7a6a5c;
+}

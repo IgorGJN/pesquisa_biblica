@@ -1,6 +1,12 @@
 // app.js
 
-import { openDB, getAllRecords, STORES } from "./db.js";
+import {
+  openDB,
+  getRecord,
+  getAllRecords,
+  STORES
+} from "./db.js";
+
 import { seedRelationTypes } from "./seed.js";
 
 import {
@@ -34,9 +40,11 @@ import { initFileBackup } from "./fileBackup.js";
 const DEFAULT_APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwZaZy20etEXXhryfSSnLKKoQn_yTL_bKqyUyCMhYBspJ4TmWxgWzcO4Rrm9vqGY7o-/exec";
 
+let appStarted = false;
 let entitiesCache = [];
+let timelineInstance = null;
 
-// ===== ELEMENTOS =====
+// ===== ELEMENTOS: ENTIDADES =====
 const form = document.getElementById("entityForm");
 const entityIdInput = document.getElementById("entityId");
 const typeInput = document.getElementById("type");
@@ -50,6 +58,10 @@ const searchInput = document.getElementById("searchInput");
 const formTitle = document.getElementById("formTitle");
 const cancelEditButton = document.getElementById("cancelEdit");
 
+const filterType = document.getElementById("filterType");
+const filterYear = document.getElementById("filterYear");
+
+// ===== ELEMENTOS: PERÍODOS =====
 const tsForm = document.getElementById("timeSpanForm");
 const timeSpanIdInput = document.getElementById("timeSpanId");
 const tsEntity = document.getElementById("tsEntity");
@@ -60,6 +72,7 @@ const tsEndYear = document.getElementById("tsEndYear");
 const tsApprox = document.getElementById("tsApprox");
 const timeSpanList = document.getElementById("timeSpanList");
 
+// ===== ELEMENTOS: RELAÇÕES =====
 const relForm = document.getElementById("relationForm");
 const relationIdInput = document.getElementById("relationId");
 const relSource = document.getElementById("relSource");
@@ -68,169 +81,51 @@ const relTarget = document.getElementById("relTarget");
 const relNotes = document.getElementById("relNotes");
 const relationList = document.getElementById("relationList");
 
+// ===== ELEMENTOS: MODAL DETALHE =====
+const entityDetailModal = document.getElementById("entityDetailModal");
+const detailEntityId = document.getElementById("detailEntityId");
+const detailName = document.getElementById("detailName");
+const detailType = document.getElementById("detailType");
+const detailSummary = document.getElementById("detailSummary");
+const closeDetailButton = document.getElementById("closeDetail");
+const editEntityFromDetail = document.getElementById("editEntityFromDetail");
+
+const detailTimeForm = document.getElementById("detailTimeForm");
+const detailTsKind = document.getElementById("detailTsKind");
+const detailTsLabel = document.getElementById("detailTsLabel");
+const detailTsStart = document.getElementById("detailTsStart");
+const detailTsEnd = document.getElementById("detailTsEnd");
+const detailTimeList = document.getElementById("detailTimeList");
+
+const detailRelationForm = document.getElementById("detailRelationForm");
+const detailRelationType = document.getElementById("detailRelationType");
+const detailRelationTarget = document.getElementById("detailRelationTarget");
+const detailRelationList = document.getElementById("detailRelationList");
+
+// ===== ELEMENTOS: ABAS =====
+const tabs = document.querySelectorAll(".tabs button");
+const tabEntities = document.getElementById("tab-entities");
+const tabTime = document.getElementById("tab-time");
+const tabRelations = document.getElementById("tab-relations");
+const tabTimeline = document.getElementById("tab-timeline");
+
+// ===== ELEMENTOS: TIMELINE =====
+const timelineContainer = document.getElementById("timelineContainer");
+const refreshTimelineButton = document.getElementById("refreshTimeline");
+const timelineTypeFilter = document.getElementById("timelineTypeFilter");
+
+// ===== ELEMENTOS: BACKUP =====
 const appsScriptUrlInput = document.getElementById("appsScriptUrl");
 const saveBackupUrlButton = document.getElementById("saveBackupUrl");
 const backupButton = document.getElementById("backupButton");
 const restoreButton = document.getElementById("restoreButton");
 const backupStatus = document.getElementById("backupStatus");
 
-const entityDetail = document.getElementById("entityDetail");
-const detailName = document.getElementById("detailName");
-const detailType = document.getElementById("detailType");
-const detailSummary = document.getElementById("detailSummary");
-const detailTimeSpans = document.getElementById("detailTimeSpans");
-const detailRelations = document.getElementById("detailRelations");
-const closeDetailButton = document.getElementById("closeDetail");
-
-const filterType = document.getElementById("filterType");
-
-const tabs = document.querySelectorAll(".tabs button");
-const tabEntities = document.getElementById("tab-entities");
-const tabTime = document.getElementById("tab-time");
-const tabRelations = document.getElementById("tab-relations");
-
-const filterYear = document.getElementById("filterYear");
-
-const tabTimeline = document.getElementById("tab-timeline");
-const timelineContainer = document.getElementById("timelineContainer");
-const refreshTimelineButton = document.getElementById("refreshTimeline");
-let timelineInstance = null;
-const timelineTypeFilter = document.getElementById("timelineTypeFilter");
-
-function formatYear(year) {
-  if (year === null || year === undefined || year === "") return "?";
-
-  const y = Number(year);
-
-  if (y < 0) {
-    return `${Math.abs(y)} a.C.`;
-  }
-
-  return `${y} d.C.`;
-}
-
-function formatPeriod(start, end) {
-  if (!start && !end) return "";
-
-  if (start && end) {
-    return `${formatYear(start)} → ${formatYear(end)}`;
-  }
-
-  if (start && !end) {
-    return `desde ${formatYear(start)}`;
-  }
-
-  if (!start && end) {
-    return `até ${formatYear(end)}`;
-  }
-
-  return "";
-}
-
-async function renderTimeline() {
-  if (!timelineContainer) return;
-
-  const entities = await listEntities();
-  const timeSpans = await listTimeSpans();
-
-  const typeFilter = timelineTypeFilter?.value || "";
-
-  const filteredEntities = typeFilter
-    ? entities.filter((entity) => entity.type === typeFilter)
-    : entities;
-
-  const filteredEntityIds = new Set(
-    filteredEntities.map((entity) => entity.id)
-  );
-
-  const entityMap = {};
-  entities.forEach((entity) => {
-    entityMap[entity.id] = entity;
-  });
-
-  const groups = filteredEntities.map((entity) => ({
-    id: entity.id,
-    content: escapeHtml(entity.name)
-  }));
-
-  const items = timeSpans
-    .filter((ts) => filteredEntityIds.has(ts.entity_id))
-    .filter((ts) => ts.start_year !== "" || ts.end_year !== "")
-    .map((ts) => {
-      const entity = entityMap[ts.entity_id];
-
-      const startYear =
-        ts.start_year !== "" ? Number(ts.start_year) : Number(ts.end_year);
-
-      const endYear =
-        ts.end_year !== "" ? Number(ts.end_year) : Number(ts.start_year);
-
-      if (Number.isNaN(startYear) || Number.isNaN(endYear)) return null;
-
-      const isRange = startYear !== endYear;
-
-      return {
-        id: ts.id,
-        group: ts.entity_id,
-        content: escapeHtml(ts.label || ts.kind || entity?.name || "Período"),
-        start: yearToVisDate(startYear),
-        end: isRange ? yearToVisDate(endYear) : undefined,
-        title: `${escapeHtml(entity?.name || "")}<br>${escapeHtml(
-          formatPeriod(ts.start_year, ts.end_year)
-        )}`,
-        className: `timeline-${entity?.type || "default"}`
-      };
-    })
-    .filter(Boolean);
-
-  timelineContainer.innerHTML = "";
-
-  if (items.length === 0) {
-    timelineContainer.innerHTML = `<p class="empty">Nenhum período com data cadastrado.</p>`;
-    return;
-  }
-
-  const options = {
-    stack: true,
-    horizontalScroll: true,
-    zoomKey: "ctrlKey",
-    orientation: "top",
-    groupOrder: "content",
-    tooltip: {
-      followMouse: true
-    },
-    margin: {
-      item: 10,
-      axis: 10
-    }
-  };
-
-  timelineInstance = new vis.Timeline(
-    timelineContainer,
-    new vis.DataSet(items),
-    new vis.DataSet(groups),
-    options
-  );
-
-  timelineInstance.on("select", async (props) => {
-    if (!props.items.length) return;
-
-    const selected = items.find((item) => item.id === props.items[0]);
-    if (!selected?.group) return;
-
-    await openEntityDetail(selected.group);
-  });
-}
-
-function yearToVisDate(year) {
-  const date = new Date(0);
-  date.setUTCFullYear(year, 0, 1);
-  date.setUTCHours(0, 0, 0, 0);
-  return date;
-}
-
 // ===== INIT =====
 async function initApp() {
+  if (appStarted) return;
+  appStarted = true;
+
   await openDB();
   await seedRelationTypes();
 
@@ -243,8 +138,58 @@ async function initApp() {
   if (searchInput) searchInput.addEventListener("input", handleSearch);
   if (cancelEditButton) cancelEditButton.addEventListener("click", resetForm);
 
+  if (filterType) {
+    filterType.addEventListener("change", () => {
+      renderEntities(searchInput?.value || "");
+    });
+  }
+
+  if (filterYear) {
+    filterYear.addEventListener("input", () => {
+      renderEntities(searchInput?.value || "");
+    });
+  }
+
   if (tsForm) tsForm.addEventListener("submit", handleTimeSpanSubmit);
   if (relForm) relForm.addEventListener("submit", handleRelationSubmit);
+
+  if (closeDetailButton) {
+    closeDetailButton.addEventListener("click", closeEntityDetail);
+  }
+
+  if (detailTimeForm) {
+    detailTimeForm.addEventListener("submit", handleDetailTimeSubmit);
+  }
+
+  if (detailRelationForm) {
+    detailRelationForm.addEventListener("submit", handleDetailRelationSubmit);
+  }
+
+  if (editEntityFromDetail) {
+    editEntityFromDetail.addEventListener("click", async () => {
+      const id = detailEntityId?.value;
+      if (!id) return;
+
+      const entity = await getRecord(STORES.entities, id);
+      if (!entity) return;
+
+      closeEntityDetail();
+      switchTab("entities");
+      fillForm(entity);
+    });
+  }
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+  });
+
+  if (refreshTimelineButton) {
+    refreshTimelineButton.addEventListener("click", renderTimeline);
+  }
+
+  if (timelineTypeFilter) {
+    timelineTypeFilter.addEventListener("change", renderTimeline);
+  }
 
   const savedUrl = localStorage.getItem("apps_script_url");
 
@@ -264,41 +209,14 @@ async function initApp() {
   if (restoreButton) restoreButton.addEventListener("click", handleRestore);
 
   initFileBackup({
-  afterImport: async () => {
-    await renderEntities();
-    await populateSelects();
-    await renderTimeSpans();
-    await renderRelations();
-  }
-});
-
-if (closeDetailButton) {
-  closeDetailButton.addEventListener("click", closeEntityDetail);
-}
-
-if (filterType) {
-  filterType.addEventListener("change", () => {
-    renderEntities(searchInput?.value || "");
+    afterImport: async () => {
+      await renderEntities();
+      await populateSelects();
+      await renderTimeSpans();
+      await renderRelations();
+      await renderTimeline();
+    }
   });
-}
-
-tabs.forEach((tab) => {
-  tab.addEventListener("click", () => switchTab(tab.dataset.tab));
-});
-
-if (filterYear) {
-  filterYear.addEventListener("input", () => {
-    renderEntities(searchInput?.value || "");
-  });
-}
-
-if (refreshTimelineButton) {
-  refreshTimelineButton.addEventListener("click", renderTimeline);
-}
-if (timelineTypeFilter) {
-  timelineTypeFilter.addEventListener("change", renderTimeline);
-}
-
 }
 
 // ===== ENTIDADES =====
@@ -320,6 +238,25 @@ async function handleSubmit(event) {
     }
 
     const editingId = entityIdInput.value;
+    const entities = await listEntities();
+
+    const duplicate = entities.find((entity) => {
+      const sameName =
+        normalizeText(entity.name) === normalizeText(payload.name);
+
+      const sameType = entity.type === payload.type;
+
+      const isAnotherEntity = !editingId || entity.id !== editingId;
+
+      return sameName && sameType && isAnotherEntity;
+    });
+
+    if (duplicate) {
+      alert(
+        `Já existe uma entidade chamada "${duplicate.name}" do mesmo tipo.\n\nAltere o nome que você está cadastrando ou edite o registro existente.`
+      );
+      return;
+    }
 
     if (editingId) {
       await updateEntity(editingId, payload);
@@ -333,6 +270,7 @@ async function handleSubmit(event) {
     await populateSelects();
     await renderTimeSpans();
     await renderRelations();
+    await renderTimeline();
   } catch (error) {
     console.error("Erro ao salvar entidade:", error);
     alert("Erro ao salvar entidade. Veja o console.");
@@ -417,7 +355,6 @@ async function renderEntities(filter = "") {
     item.className = "entity-item";
 
     const periods = entityPeriodsMap[entity.id] || [];
-
     let periodText = "";
 
     if (periods.length > 0) {
@@ -429,7 +366,11 @@ async function renderEntities(filter = "") {
       <div class="entity-top">
         <div>
           <div class="entity-name">${escapeHtml(entity.name)}</div>
-          ${periodText ? `<div class="entity-period">${escapeHtml(periodText)}</div>` : ""}
+          ${
+            periodText
+              ? `<div class="entity-period">${escapeHtml(periodText)}</div>`
+              : ""
+          }
           ${
             entity.subtype
               ? `<div class="entity-summary">${escapeHtml(entity.subtype)}</div>`
@@ -460,7 +401,6 @@ async function renderEntities(filter = "") {
   });
 }
 
-
 async function handleEntityAction(event) {
   const id = event.target.dataset.id;
   const action = event.target.dataset.action;
@@ -469,8 +409,8 @@ async function handleEntityAction(event) {
   if (!entity) return;
 
   if (action === "detail") {
-  await openEntityDetail(id);
-}
+    await openEntityDetail(id);
+  }
 
   if (action === "edit") {
     fillForm(entity);
@@ -481,10 +421,12 @@ async function handleEntityAction(event) {
     if (!confirmDelete) return;
 
     await deleteEntity(id);
+
     await renderEntities(searchInput?.value || "");
     await populateSelects();
     await renderTimeSpans();
     await renderRelations();
+    await renderTimeline();
   }
 }
 
@@ -546,6 +488,8 @@ async function handleTimeSpanSubmit(event) {
     timeSpanIdInput.value = "";
 
     await renderTimeSpans();
+    await renderEntities(searchInput?.value || "");
+    await renderTimeline();
   } catch (error) {
     console.error("Erro ao salvar período:", error);
     alert("Erro ao salvar período. Veja o console.");
@@ -586,6 +530,8 @@ async function renderTimeSpans() {
     div.querySelector('[data-action="delete"]').onclick = async () => {
       await deleteTimeSpan(ts.id);
       await renderTimeSpans();
+      await renderEntities(searchInput?.value || "");
+      await renderTimeline();
     };
 
     timeSpanList.appendChild(div);
@@ -600,6 +546,8 @@ function fillTimeSpanForm(ts) {
   tsStartYear.value = ts.start_year || "";
   tsEndYear.value = ts.end_year || "";
   tsApprox.checked = !!ts.start_approx;
+
+  switchTab("time");
 
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -644,7 +592,6 @@ async function renderRelations() {
 
   const data = await listRelations();
   const entities = await listEntities();
-
   const relationTypes = await getAllRecords(STORES.relation_types);
 
   const entityMap = {};
@@ -686,6 +633,9 @@ async function renderRelations() {
     div.querySelector('[data-action="delete"]').onclick = async () => {
       await deleteRelation(rel.id);
       await renderRelations();
+
+      const currentDetailId = detailEntityId?.value;
+      if (currentDetailId) await renderDetailRelations(currentDetailId);
     };
 
     relationList.appendChild(div);
@@ -699,7 +649,236 @@ function fillRelationForm(rel) {
   relTarget.value = rel.target_id || "";
   relNotes.value = rel.notes || "";
 
+  switchTab("relations");
+
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ===== MODAL DETALHE =====
+async function openEntityDetail(entityId) {
+  if (!entityDetailModal) return;
+
+  const entity = await getRecord(STORES.entities, entityId);
+  if (!entity) return;
+
+  entityDetailModal.classList.remove("hidden");
+
+  detailName.textContent = entity.name || "Sem nome";
+  detailType.textContent = `${entity.type || ""}${
+    entity.subtype ? " / " + entity.subtype : ""
+  }`;
+  detailSummary.textContent = entity.summary || "Sem resumo.";
+
+  detailEntityId.value = entity.id;
+
+  await populateDetailRelationForm(entity.id);
+  await renderDetailTimeSpans(entity.id);
+  await renderDetailRelations(entity.id);
+}
+
+function closeEntityDetail() {
+  if (entityDetailModal) {
+    entityDetailModal.classList.add("hidden");
+  }
+}
+
+async function renderDetailTimeSpans(entityId) {
+  if (!detailTimeList) return;
+
+  const timeSpans = await listTimeSpans();
+  const filtered = timeSpans.filter((ts) => ts.entity_id === entityId);
+
+  detailTimeList.innerHTML = "";
+
+  if (filtered.length === 0) {
+    detailTimeList.innerHTML = `<p class="empty">Sem períodos.</p>`;
+    return;
+  }
+
+  filtered.forEach((ts) => {
+    const div = document.createElement("div");
+    div.className = "mini-item";
+
+    div.innerHTML = `
+      <strong>${escapeHtml(ts.label || ts.kind)}</strong>
+      <p>${escapeHtml(formatPeriod(ts.start_year, ts.end_year))}</p>
+
+      <div class="entity-actions">
+        <button class="edit" data-action="edit">Editar</button>
+        <button class="danger" data-action="delete">Excluir</button>
+      </div>
+    `;
+
+    div.querySelector('[data-action="edit"]').onclick = () => {
+      closeEntityDetail();
+      fillTimeSpanForm(ts);
+    };
+
+    div.querySelector('[data-action="delete"]').onclick = async () => {
+      const ok = confirm("Excluir este período?");
+      if (!ok) return;
+
+      await deleteTimeSpan(ts.id);
+      await renderDetailTimeSpans(entityId);
+      await renderTimeSpans();
+      await renderEntities(searchInput?.value || "");
+      await renderTimeline();
+    };
+
+    detailTimeList.appendChild(div);
+  });
+}
+
+async function populateDetailRelationForm(currentEntityId) {
+  if (!detailRelationType || !detailRelationTarget) return;
+
+  const entities = await listEntities();
+  const relationTypes = await getAllRecords(STORES.relation_types);
+
+  detailRelationType.innerHTML = `<option value="">Tipo de relação</option>`;
+
+  relationTypes.forEach((rt) => {
+    const option = document.createElement("option");
+    option.value = rt.key;
+    option.textContent = rt.label || rt.key;
+    detailRelationType.appendChild(option);
+  });
+
+  detailRelationTarget.innerHTML = `<option value="">Destino</option>`;
+
+  entities
+    .filter((entity) => entity.id !== currentEntityId)
+    .forEach((entity) => {
+      const option = document.createElement("option");
+      option.value = entity.id;
+      option.textContent = entity.name;
+      detailRelationTarget.appendChild(option);
+    });
+}
+
+async function renderDetailRelations(entityId) {
+  if (!detailRelationList) return;
+
+  const relations = await listRelations();
+  const entities = await listEntities();
+  const relationTypes = await getAllRecords(STORES.relation_types);
+
+  const entityMap = {};
+  entities.forEach((entity) => {
+    entityMap[entity.id] = entity;
+  });
+
+  const relationTypeMap = {};
+  relationTypes.forEach((rt) => {
+    relationTypeMap[rt.key] = rt;
+  });
+
+  const filtered = relations.filter((rel) => {
+    return rel.source_id === entityId || rel.target_id === entityId;
+  });
+
+  detailRelationList.innerHTML = "";
+
+  if (filtered.length === 0) {
+    detailRelationList.innerHTML = `<p class="empty">Sem relações.</p>`;
+    return;
+  }
+
+  filtered.forEach((rel) => {
+    const source = entityMap[rel.source_id]?.name || rel.source_id;
+    const target = entityMap[rel.target_id]?.name || rel.target_id;
+    const relLabel =
+      relationTypeMap[rel.relation_type_key]?.label || rel.relation_type_key;
+
+    const div = document.createElement("div");
+    div.className = "mini-item";
+
+    div.innerHTML = `
+      <strong>${escapeHtml(source)}</strong>
+      → ${escapeHtml(relLabel)} →
+      <strong>${escapeHtml(target)}</strong>
+      ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
+
+      <div class="entity-actions">
+        <button class="edit" data-action="edit">Editar</button>
+        <button class="danger" data-action="delete">Excluir</button>
+      </div>
+    `;
+
+    div.querySelector('[data-action="edit"]').onclick = () => {
+      closeEntityDetail();
+      fillRelationForm(rel);
+    };
+
+    div.querySelector('[data-action="delete"]').onclick = async () => {
+      const ok = confirm("Excluir esta relação?");
+      if (!ok) return;
+
+      await deleteRelation(rel.id);
+      await renderDetailRelations(entityId);
+      await renderRelations();
+    };
+
+    detailRelationList.appendChild(div);
+  });
+}
+
+async function handleDetailTimeSubmit(event) {
+  event.preventDefault();
+
+  const entityId = detailEntityId?.value;
+  if (!entityId) return;
+
+  const payload = {
+    entity_id: entityId,
+    kind: detailTsKind.value.trim(),
+    label: detailTsLabel.value.trim(),
+    start_year: detailTsStart.value,
+    end_year: detailTsEnd.value,
+    start_approx: false,
+    end_approx: false
+  };
+
+  if (!payload.kind) {
+    alert("Informe o tipo do período.");
+    return;
+  }
+
+  await createTimeSpan(payload);
+
+  detailTimeForm.reset();
+
+  await renderDetailTimeSpans(entityId);
+  await renderTimeSpans();
+  await renderEntities(searchInput?.value || "");
+  await renderTimeline();
+}
+
+async function handleDetailRelationSubmit(event) {
+  event.preventDefault();
+
+  const entityId = detailEntityId?.value;
+  if (!entityId) return;
+
+  const payload = {
+    source_id: entityId,
+    relation_type_key: detailRelationType.value,
+    target_id: detailRelationTarget.value,
+    notes: ""
+  };
+
+  if (!payload.relation_type_key || !payload.target_id) {
+    alert("Selecione o tipo de relação e o destino.");
+    return;
+  }
+
+  await createRelation(payload);
+
+  detailRelationForm.reset();
+
+  await populateDetailRelationForm(entityId);
+  await renderDetailRelations(entityId);
+  await renderRelations();
 }
 
 // ===== SELECTS =====
@@ -742,6 +921,113 @@ async function populateSelects() {
   }
 }
 
+// ===== TIMELINE =====
+async function renderTimeline() {
+  if (!timelineContainer || typeof vis === "undefined") return;
+
+  const entities = await listEntities();
+  const timeSpans = await listTimeSpans();
+
+  const typeFilter = timelineTypeFilter?.value || "";
+
+  const filteredEntities = typeFilter
+    ? entities.filter((entity) => entity.type === typeFilter)
+    : entities;
+
+  const filteredEntityIds = new Set(filteredEntities.map((entity) => entity.id));
+
+  const entityMap = {};
+  entities.forEach((entity) => {
+    entityMap[entity.id] = entity;
+  });
+
+  const groups = filteredEntities.map((entity) => ({
+    id: entity.id,
+    content: escapeHtml(entity.name)
+  }));
+
+  const items = timeSpans
+    .filter((ts) => filteredEntityIds.has(ts.entity_id))
+    .filter((ts) => ts.start_year !== "" || ts.end_year !== "")
+    .map((ts) => {
+      const entity = entityMap[ts.entity_id];
+
+      const startYear =
+        ts.start_year !== "" ? Number(ts.start_year) : Number(ts.end_year);
+
+      const endYear =
+        ts.end_year !== "" ? Number(ts.end_year) : Number(ts.start_year);
+
+      if (Number.isNaN(startYear) || Number.isNaN(endYear)) return null;
+
+      const isRange = startYear !== endYear;
+
+      return {
+        id: ts.id,
+        group: ts.entity_id,
+        content: escapeHtml(ts.label || ts.kind || entity?.name || "Período"),
+        start: yearToVisDate(startYear),
+        end: isRange ? yearToVisDate(endYear) : undefined,
+        title: `${escapeHtml(entity?.name || "")}<br>${escapeHtml(
+          formatPeriod(ts.start_year, ts.end_year)
+        )}`,
+        className: `timeline-${entity?.type || "default"}`
+      };
+    })
+    .filter(Boolean);
+
+  timelineContainer.innerHTML = "";
+
+  if (timelineInstance) {
+    timelineInstance.destroy();
+    timelineInstance = null;
+  }
+
+  if (items.length === 0) {
+    timelineContainer.innerHTML =
+      `<p class="empty">Nenhum período com data cadastrado.</p>`;
+    return;
+  }
+
+  const options = {
+    stack: true,
+    horizontalScroll: true,
+    zoomKey: "ctrlKey",
+    orientation: "top",
+    groupOrder: "content",
+    tooltip: {
+      followMouse: true
+    },
+    margin: {
+      item: 10,
+      axis: 10
+    }
+  };
+
+  timelineInstance = new vis.Timeline(
+    timelineContainer,
+    new vis.DataSet(items),
+    new vis.DataSet(groups),
+    options
+  );
+
+  timelineInstance.on("select", async (props) => {
+    if (!props.items.length) return;
+
+    const selected = items.find((item) => item.id === props.items[0]);
+    if (!selected?.group) return;
+
+    await openEntityDetail(selected.group);
+  });
+}
+
+function yearToVisDate(year) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, 0, 1);
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
+
 // ===== BACKUP =====
 async function handleBackup() {
   try {
@@ -778,6 +1064,7 @@ async function handleRestore() {
     await populateSelects();
     await renderTimeSpans();
     await renderRelations();
+    await renderTimeline();
 
     setBackupStatus("Restauração concluída.");
   } catch (error) {
@@ -802,104 +1089,7 @@ function setBackupStatus(message) {
   }
 }
 
-// ===== UTIL =====
-function escapeHtml(value) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-async function openEntityDetail(entityId) {
-  if (!entityDetail) return;
-
-  const entities = await listEntities();
-  const timeSpans = await listTimeSpans();
-  const relations = await listRelations();
-  const relationTypes = await getAllRecords(STORES.relation_types);
-
-  const entity = entities.find((item) => item.id === entityId);
-  if (!entity) return;
-
-  const entityMap = {};
-  entities.forEach((item) => {
-    entityMap[item.id] = item;
-  });
-
-  const relationTypeMap = {};
-  relationTypes.forEach((item) => {
-    relationTypeMap[item.key] = item;
-  });
-
-  detailName.textContent = entity.name;
-  detailType.textContent = `${entity.type}${entity.subtype ? " / " + entity.subtype : ""}`;
-  detailSummary.textContent = entity.summary || "Sem resumo.";
-
-  const relatedTimeSpans = timeSpans.filter((ts) => ts.entity_id === entityId);
-
-  detailTimeSpans.innerHTML = "";
-
-  if (relatedTimeSpans.length === 0) {
-    detailTimeSpans.innerHTML = `<p class="empty">Nenhum período registrado.</p>`;
-  } else {
-    relatedTimeSpans.forEach((ts) => {
-      const div = document.createElement("div");
-      div.className = "mini-item";
-
-      div.innerHTML = `
-        <strong>${escapeHtml(ts.label || ts.kind)}</strong>
-        <p>${escapeHtml(formatPeriod(ts.start_year, ts.end_year))}</p>
-      `;
-
-      detailTimeSpans.appendChild(div);
-    });
-  }
-
-  const relatedRelations = relations.filter((rel) => {
-    return rel.source_id === entityId || rel.target_id === entityId;
-  });
-
-  detailRelations.innerHTML = "";
-
-  if (relatedRelations.length === 0) {
-    detailRelations.innerHTML = `<p class="empty">Nenhuma relação registrada.</p>`;
-  } else {
-    relatedRelations.forEach((rel) => {
-      const source = entityMap[rel.source_id]?.name || rel.source_id;
-      const target = entityMap[rel.target_id]?.name || rel.target_id;
-      const relLabel =
-        relationTypeMap[rel.relation_type_key]?.label || rel.relation_type_key;
-
-      const div = document.createElement("div");
-      div.className = "mini-item";
-
-      div.innerHTML = `
-        <strong>${escapeHtml(source)}</strong>
-        → ${escapeHtml(relLabel)} →
-        <strong>${escapeHtml(target)}</strong>
-        ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
-      `;
-
-      detailRelations.appendChild(div);
-    });
-  }
-
-  entityDetail.classList.remove("hidden");
-
-  entityDetail.scrollIntoView({
-    behavior: "smooth",
-    block: "start"
-  });
-}
-
-function closeEntityDetail() {
-  if (entityDetail) {
-    entityDetail.classList.add("hidden");
-  }
-}
-
+// ===== ABAS =====
 function switchTab(tab) {
   tabs.forEach((t) => t.classList.remove("active"));
 
@@ -919,6 +1109,57 @@ function switchTab(tab) {
     tabTimeline.classList.remove("hidden");
     renderTimeline();
   }
+}
+
+// ===== FORMATOS / UTIL =====
+function formatYear(year) {
+  if (year === null || year === undefined || year === "") return "?";
+
+  const y = Number(year);
+
+  if (y < 0) {
+    return `${Math.abs(y)} a.C.`;
+  }
+
+  return `${y} d.C.`;
+}
+
+function formatPeriod(start, end) {
+  const hasStart = start !== null && start !== undefined && start !== "";
+  const hasEnd = end !== null && end !== undefined && end !== "";
+
+  if (!hasStart && !hasEnd) return "Período não informado";
+
+  if (hasStart && hasEnd) {
+    return `${formatYear(start)} → ${formatYear(end)}`;
+  }
+
+  if (hasStart && !hasEnd) {
+    return `desde ${formatYear(start)}`;
+  }
+
+  if (!hasStart && hasEnd) {
+    return `até ${formatYear(end)}`;
+  }
+
+  return "Período não informado";
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 initApp().catch((error) => {
