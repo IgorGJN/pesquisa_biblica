@@ -39,6 +39,7 @@ import { initFileBackup } from "./fileBackup.js";
 
 import {
   createSource,
+  listSources,
   listSourcesByEntity,
   deleteSource
 } from "./sourceService.js";
@@ -135,6 +136,21 @@ const detailSourceReference = document.getElementById("detailSourceReference");
 const detailSourceUrl = document.getElementById("detailSourceUrl");
 const detailSourceNotes = document.getElementById("detailSourceNotes");
 const detailSourceList = document.getElementById("detailSourceList");
+
+// ===== MODAL FONTES
+const quickSourceModal = document.getElementById("quickSourceModal");
+const quickSourceForm = document.getElementById("quickSourceForm");
+const closeQuickSource = document.getElementById("closeQuickSource");
+
+const quickSourceEntityId = document.getElementById("quickSourceEntityId");
+const quickSourceTimeSpanId = document.getElementById("quickSourceTimeSpanId");
+const quickSourceRelationId = document.getElementById("quickSourceRelationId");
+
+const quickSourceType = document.getElementById("quickSourceType");
+const quickSourceCitation = document.getElementById("quickSourceCitation");
+const quickSourceReference = document.getElementById("quickSourceReference");
+const quickSourceUrl = document.getElementById("quickSourceUrl");
+const quickSourceNotes = document.getElementById("quickSourceNotes");
 
 // ===== INIT =====
 async function initApp() {
@@ -234,6 +250,15 @@ async function initApp() {
   });
   if (detailSourceForm) {
   detailSourceForm.addEventListener("submit", handleDetailSourceSubmit);
+}
+
+
+  if (closeQuickSource) {
+  closeQuickSource.addEventListener("click", closeQuickSourceModal);
+}
+
+if (quickSourceForm) {
+  quickSourceForm.addEventListener("submit", handleQuickSourceSubmit);
 }
 
 
@@ -707,6 +732,8 @@ async function renderDetailTimeSpans(entityId) {
   if (!detailTimeList) return;
 
   const timeSpans = await listTimeSpans();
+  const sources = await listSources();
+
   const filtered = timeSpans.filter((ts) => ts.entity_id === entityId);
 
   detailTimeList.innerHTML = "";
@@ -717,6 +744,12 @@ async function renderDetailTimeSpans(entityId) {
   }
 
   filtered.forEach((ts) => {
+    const tsSources = sources.filter((source) => {
+      return String(source.related_time_span_ids || "")
+        .split("|")
+        .includes(ts.id);
+    });
+
     const div = document.createElement("div");
     div.className = "mini-item";
 
@@ -724,8 +757,25 @@ async function renderDetailTimeSpans(entityId) {
       <strong>${escapeHtml(ts.label || ts.kind)}</strong>
       <p>${escapeHtml(formatPeriod(ts.start_year, ts.end_year))}</p>
 
+      ${
+        tsSources.length
+          ? `<div class="source-list">
+              ${tsSources
+                .map(
+                  (src) => `
+                    <div class="source-chip">
+                      Fonte: ${escapeHtml(src.citation || src.reference || "Sem título")}
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+
       <div class="entity-actions">
         <button class="edit" data-action="edit">Editar</button>
+        <button class="secondary" data-action="source">Fonte</button>
         <button class="danger" data-action="delete">Excluir</button>
       </div>
     `;
@@ -733,6 +783,13 @@ async function renderDetailTimeSpans(entityId) {
     div.querySelector('[data-action="edit"]').onclick = () => {
       closeEntityDetail();
       fillTimeSpanForm(ts);
+    };
+
+    div.querySelector('[data-action="source"]').onclick = () => {
+      openQuickSourceForm({
+        entityId,
+        timeSpanId: ts.id
+      });
     };
 
     div.querySelector('[data-action="delete"]').onclick = async () => {
@@ -749,6 +806,7 @@ async function renderDetailTimeSpans(entityId) {
     detailTimeList.appendChild(div);
   });
 }
+
 
 async function populateDetailRelationForm(currentEntityId) {
   if (!detailRelationType || !detailRelationTarget) return;
@@ -772,7 +830,7 @@ async function populateDetailRelationForm(currentEntityId) {
     .forEach((entity) => {
       const option = document.createElement("option");
       option.value = entity.id;
-      option.textContent = entity.name;
+      option.textContent = formatEntityOption(entity);
       detailRelationTarget.appendChild(option);
     });
 }
@@ -783,6 +841,7 @@ async function renderDetailRelations(entityId) {
   const relations = await listRelations();
   const entities = await listEntities();
   const relationTypes = await getAllRecords(STORES.relation_types);
+  const sources = await listSources();
 
   const entityMap = {};
   entities.forEach((entity) => {
@@ -811,6 +870,12 @@ async function renderDetailRelations(entityId) {
     const relLabel =
       relationTypeMap[rel.relation_type_key]?.label || rel.relation_type_key;
 
+    const relSources = sources.filter((sourceItem) => {
+      return String(sourceItem.related_relation_ids || "")
+        .split("|")
+        .includes(rel.id);
+    });
+
     const div = document.createElement("div");
     div.className = "mini-item";
 
@@ -820,8 +885,25 @@ async function renderDetailRelations(entityId) {
       <strong>${escapeHtml(target)}</strong>
       ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
 
+      ${
+        relSources.length
+          ? `<div class="source-list">
+              ${relSources
+                .map(
+                  (src) => `
+                    <div class="source-chip">
+                      Fonte: ${escapeHtml(src.citation || src.reference || "Sem título")}
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+
       <div class="entity-actions">
         <button class="edit" data-action="edit">Editar</button>
+        <button class="secondary" data-action="source">Fonte</button>
         <button class="danger" data-action="delete">Excluir</button>
       </div>
     `;
@@ -829,6 +911,13 @@ async function renderDetailRelations(entityId) {
     div.querySelector('[data-action="edit"]').onclick = () => {
       closeEntityDetail();
       fillRelationForm(rel);
+    };
+
+    div.querySelector('[data-action="source"]').onclick = () => {
+      openQuickSourceForm({
+        entityId,
+        relationId: rel.id
+      });
     };
 
     div.querySelector('[data-action="delete"]').onclick = async () => {
@@ -900,6 +989,56 @@ async function handleDetailRelationSubmit(event) {
   await populateDetailRelationForm(entityId);
   await renderDetailRelations(entityId);
   await renderRelations();
+}
+
+function openQuickSourceForm({ entityId, timeSpanId = "", relationId = "" }) {
+  if (!quickSourceModal) return;
+
+  quickSourceEntityId.value = entityId || "";
+  quickSourceTimeSpanId.value = timeSpanId || "";
+  quickSourceRelationId.value = relationId || "";
+
+  quickSourceForm.reset();
+
+  quickSourceModal.classList.remove("hidden");
+}
+
+function closeQuickSourceModal() {
+  if (quickSourceModal) {
+    quickSourceModal.classList.add("hidden");
+  }
+}
+
+async function handleQuickSourceSubmit(event) {
+  event.preventDefault();
+
+  const entityId = quickSourceEntityId.value;
+  const timeSpanId = quickSourceTimeSpanId.value;
+  const relationId = quickSourceRelationId.value;
+
+  const payload = {
+    source_type: quickSourceType.value,
+    citation: quickSourceCitation.value.trim(),
+    reference: quickSourceReference.value.trim(),
+    url: quickSourceUrl.value.trim(),
+    notes: quickSourceNotes.value.trim(),
+    related_entity_ids: entityId,
+    related_time_span_ids: timeSpanId,
+    related_relation_ids: relationId
+  };
+
+  if (!payload.citation && !payload.reference && !payload.notes) {
+    alert("Informe pelo menos uma referência, descrição ou observação.");
+    return;
+  }
+
+  await createSource(payload);
+
+  closeQuickSourceModal();
+
+  if (entityId) {
+    await renderDetailSources(entityId);
+  }
 }
 
 async function renderDetailSources(entityId) {
@@ -991,7 +1130,7 @@ async function populateSelects() {
     entities.forEach((entity) => {
       const option = document.createElement("option");
       option.value = entity.id;
-      option.textContent = entity.name;
+      option.textContent = formatEntityOption(entity);
       select.appendChild(option);
     });
 
@@ -1180,6 +1319,33 @@ function setBackupStatus(message) {
   } else {
     console.log(message);
   }
+}
+
+function formatEntityOption(entity) {
+  const typeLabels = {
+    person: "Pessoa",
+    book: "Livro",
+    event: "Evento",
+    place: "Lugar",
+    people_group: "Grupo",
+    role: "Função",
+    period: "Período",
+    theme: "Tema"
+  };
+
+  const type = typeLabels[entity.type] || entity.type || "—";
+
+  const subtype = entity.subtype
+    ? ` · ${capitalize(entity.subtype)}`
+    : "";
+
+  return `${entity.name} (${type}${subtype})`;
+}
+
+function capitalize(text) {
+  return String(text || "")
+    .charAt(0)
+    .toUpperCase() + String(text || "").slice(1);
 }
 
 // ===== ABAS =====

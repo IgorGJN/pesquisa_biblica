@@ -342,6 +342,52 @@
     </div>
   </div>
 
+<div id="quickSourceModal" class="modal hidden">
+  <div class="modal-content">
+    <button type="button" id="closeQuickSource" class="close">✕</button>
+
+    <h2>Adicionar fonte</h2>
+
+    <form id="quickSourceForm">
+      <input type="hidden" id="quickSourceEntityId" />
+      <input type="hidden" id="quickSourceTimeSpanId" />
+      <input type="hidden" id="quickSourceRelationId" />
+
+      <label>
+        Tipo da fonte
+        <select id="quickSourceType">
+          <option value="biblical">Bíblica</option>
+          <option value="historical">Histórica</option>
+          <option value="archaeological">Arqueológica</option>
+          <option value="personal_note">Nota pessoal</option>
+        </select>
+      </label>
+
+      <label>
+        Referência
+        <input id="quickSourceCitation" placeholder="Ex: 1 Samuel 16" />
+      </label>
+
+      <label>
+        Descrição curta
+        <input id="quickSourceReference" placeholder="Ex: Unção de Davi" />
+      </label>
+
+      <label>
+        Link
+        <input id="quickSourceUrl" placeholder="Opcional" />
+      </label>
+
+      <label>
+        Observações
+        <textarea id="quickSourceNotes" rows="3"></textarea>
+      </label>
+
+      <button type="submit" class="primary">Salvar fonte</button>
+    </form>
+  </div>
+</div>
+
   <script type="module" src="app.js?v=0.3"></script>
 
   <script>
