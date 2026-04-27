@@ -865,8 +865,12 @@ async function renderDetailRelations(entityId) {
   }
 
   filtered.forEach((rel) => {
-    const source = entityMap[rel.source_id]?.name || rel.source_id;
-    const target = entityMap[rel.target_id]?.name || rel.target_id;
+    const source = entityMap[rel.source_id];
+    const target = entityMap[rel.target_id];
+
+    const sourceName = source?.name || rel.source_id;
+    const targetName = target?.name || rel.target_id;
+
     const relLabel =
       relationTypeMap[rel.relation_type_key]?.label || rel.relation_type_key;
 
@@ -880,9 +884,14 @@ async function renderDetailRelations(entityId) {
     div.className = "mini-item";
 
     div.innerHTML = `
-      <strong>${escapeHtml(source)}</strong>
+      <button class="link-button" data-entity-id="${escapeHtml(rel.source_id)}">
+        ${escapeHtml(sourceName)}
+      </button>
       → ${escapeHtml(relLabel)} →
-      <strong>${escapeHtml(target)}</strong>
+      <button class="link-button" data-entity-id="${escapeHtml(rel.target_id)}">
+        ${escapeHtml(targetName)}
+      </button>
+
       ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
 
       ${
@@ -907,6 +916,15 @@ async function renderDetailRelations(entityId) {
         <button class="danger" data-action="delete">Excluir</button>
       </div>
     `;
+
+    div.querySelectorAll(".link-button").forEach((button) => {
+      button.onclick = async () => {
+        const nextEntityId = button.dataset.entityId;
+        if (!nextEntityId) return;
+
+        await openEntityDetail(nextEntityId);
+      };
+    });
 
     div.querySelector('[data-action="edit"]').onclick = () => {
       closeEntityDetail();
