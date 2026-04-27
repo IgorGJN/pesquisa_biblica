@@ -361,3 +361,26 @@ button {
 .muted {
   color: #7a6a5c;
 }
+
+.random-suggestion {
+  display: none;
+  background: #fff8e1;
+  border-left: 5px solid #f9a825;
+  padding: 12px 16px;
+  margin: 15px 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.random-suggestion strong {
+  color: #6d4c41;
+}
+
+.random-suggestion button {
+  margin-left: 10px;
+  background: #f57c00;
+}
+
+.random-suggestion button:hover {
+  background: #ef6c00;
+}

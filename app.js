@@ -37,6 +37,12 @@ import {
 
 import { initFileBackup } from "./fileBackup.js";
 
+import {
+  createSource,
+  listSourcesByEntity,
+  deleteSource
+} from "./sourceService.js";
+
 const DEFAULT_APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwZaZy20etEXXhryfSSnLKKoQn_yTL_bKqyUyCMhYBspJ4TmWxgWzcO4Rrm9vqGY7o-/exec";
 
@@ -120,6 +126,15 @@ const saveBackupUrlButton = document.getElementById("saveBackupUrl");
 const backupButton = document.getElementById("backupButton");
 const restoreButton = document.getElementById("restoreButton");
 const backupStatus = document.getElementById("backupStatus");
+
+// ===== REFERENCIAS
+const detailSourceForm = document.getElementById("detailSourceForm");
+const detailSourceType = document.getElementById("detailSourceType");
+const detailSourceCitation = document.getElementById("detailSourceCitation");
+const detailSourceReference = document.getElementById("detailSourceReference");
+const detailSourceUrl = document.getElementById("detailSourceUrl");
+const detailSourceNotes = document.getElementById("detailSourceNotes");
+const detailSourceList = document.getElementById("detailSourceList");
 
 // ===== INIT =====
 async function initApp() {
@@ -217,6 +232,11 @@ async function initApp() {
       await renderTimeline();
     }
   });
+  if (detailSourceForm) {
+  detailSourceForm.addEventListener("submit", handleDetailSourceSubmit);
+}
+
+
 }
 
 // ===== ENTIDADES =====
@@ -674,6 +694,7 @@ async function openEntityDetail(entityId) {
   await populateDetailRelationForm(entity.id);
   await renderDetailTimeSpans(entity.id);
   await renderDetailRelations(entity.id);
+  await renderDetailSources(entity.id);
 }
 
 function closeEntityDetail() {
@@ -879,6 +900,78 @@ async function handleDetailRelationSubmit(event) {
   await populateDetailRelationForm(entityId);
   await renderDetailRelations(entityId);
   await renderRelations();
+}
+
+async function renderDetailSources(entityId) {
+  if (!detailSourceList) return;
+
+  const sources = await listSourcesByEntity(entityId);
+
+  detailSourceList.innerHTML = "";
+
+  if (sources.length === 0) {
+    detailSourceList.innerHTML = `<p class="empty">Sem fontes registradas.</p>`;
+    return;
+  }
+
+  sources.forEach((source) => {
+    const div = document.createElement("div");
+    div.className = "mini-item";
+
+    div.innerHTML = `
+      <strong>${escapeHtml(source.citation || source.reference || "Fonte")}</strong>
+      <p>${escapeHtml(source.source_type || "")}</p>
+      ${source.reference ? `<p>${escapeHtml(source.reference)}</p>` : ""}
+      ${source.notes ? `<p>${escapeHtml(source.notes)}</p>` : ""}
+      ${
+        source.url
+          ? `<p><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener">Abrir link</a></p>`
+          : ""
+      }
+
+      <div class="entity-actions">
+        <button class="danger" data-action="delete">Excluir</button>
+      </div>
+    `;
+
+    div.querySelector('[data-action="delete"]').onclick = async () => {
+      const ok = confirm("Excluir esta fonte?");
+      if (!ok) return;
+
+      await deleteSource(source.id);
+      await renderDetailSources(entityId);
+    };
+
+    detailSourceList.appendChild(div);
+  });
+}
+
+async function handleDetailSourceSubmit(event) {
+  event.preventDefault();
+
+  const entityId = detailEntityId?.value;
+  if (!entityId) return;
+
+  const payload = {
+    source_type: detailSourceType.value,
+    citation: detailSourceCitation.value.trim(),
+    reference: detailSourceReference.value.trim(),
+    url: detailSourceUrl.value.trim(),
+    notes: detailSourceNotes.value.trim(),
+    related_entity_ids: entityId
+  };
+
+  if (!payload.citation && !payload.reference && !payload.notes) {
+    alert("Informe pelo menos uma referência, descrição ou observação.");
+    return;
+  }
+
+  await createSource(payload);
+
+  detailSourceForm.reset();
+  if (detailSourceNotes) detailSourceNotes.value = "";
+
+  await renderDetailSources(entityId);
 }
 
 // ===== SELECTS =====

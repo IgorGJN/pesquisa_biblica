@@ -22,6 +22,7 @@
 <body>
   <header class="app-header">
     <h1>Estudo Bíblico</h1>
+    <div id="randomSuggestion" class="random-suggestion"></div>
     <p>Base local de entidades</p>
 
     <div class="tabs">
@@ -306,7 +307,38 @@
         </form>
 
         <div id="detailRelationList"></div>
+
       </section>
+
+      <section class="detail-section">
+  <div class="section-title">
+    <h3>Fontes / Referências</h3>
+  </div>
+
+  <form id="detailSourceForm" class="inline-form">
+    <select id="detailSourceType">
+      <option value="biblical">Bíblica</option>
+      <option value="historical">Histórica</option>
+      <option value="archaeological">Arqueológica</option>
+      <option value="personal_note">Nota pessoal</option>
+    </select>
+
+    <input id="detailSourceCitation" placeholder="Referência. Ex: 1 Samuel 16" />
+    <input id="detailSourceReference" placeholder="Descrição curta" />
+    <input id="detailSourceUrl" placeholder="Link opcional" />
+
+    <button type="submit" class="primary small">Adicionar</button>
+  </form>
+
+  <textarea
+    id="detailSourceNotes"
+    rows="3"
+    placeholder="Observações da fonte"
+  ></textarea>
+
+  <div id="detailSourceList"></div>
+</section>
+
     </div>
   </div>
 
