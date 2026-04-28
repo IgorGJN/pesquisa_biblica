@@ -152,6 +152,11 @@ const quickSourceReference = document.getElementById("quickSourceReference");
 const quickSourceUrl = document.getElementById("quickSourceUrl");
 const quickSourceNotes = document.getElementById("quickSourceNotes");
 
+// ===== BUSCA GLOBAL 
+const tabSearch = document.getElementById("tab-search");
+const globalSearchInput = document.getElementById("globalSearchInput");
+const globalSearchResults = document.getElementById("globalSearchResults");
+
 // ===== INIT =====
 async function initApp() {
   if (appStarted) return;
@@ -259,6 +264,10 @@ async function initApp() {
 
 if (quickSourceForm) {
   quickSourceForm.addEventListener("submit", handleQuickSourceSubmit);
+}
+
+if (globalSearchInput) {
+  globalSearchInput.addEventListener("input", handleGlobalSearch);
 }
 
 
@@ -1386,6 +1395,11 @@ function switchTab(tab) {
     tabTimeline.classList.remove("hidden");
     renderTimeline();
   }
+
+  if (tabSearch) tabSearch.classList.add("hidden");
+  if (tab === "search" && tabSearch) {
+  tabSearch.classList.remove("hidden");
+} 
 }
 
 // ===== FORMATOS / UTIL =====
@@ -1421,6 +1435,99 @@ function formatPeriod(start, end) {
 
   return "Período não informado";
 }
+
+
+async function handleGlobalSearch() {
+  if (!globalSearchInput || !globalSearchResults) return;
+
+  const query = normalizeText(globalSearchInput.value);
+
+  globalSearchResults.innerHTML = "";
+
+  if (!query) {
+    globalSearchResults.innerHTML = `<p class="empty">Digite algo para buscar.</p>`;
+    return;
+  }
+
+  const entities = await listEntities();
+  const sources = await listSources();
+
+  const matchedEntities = entities.filter((entity) => {
+    const text = normalizeText([
+      entity.name,
+      entity.type,
+      entity.subtype,
+      entity.summary,
+      entity.tags
+    ].join(" "));
+
+    return text.includes(query);
+  });
+
+  const matchedSources = sources.filter((source) => {
+    const text = normalizeText([
+      source.citation,
+      source.reference,
+      source.notes,
+      source.url,
+      source.source_type
+    ].join(" "));
+
+    return text.includes(query);
+  });
+
+  globalSearchResults.innerHTML = `
+    <h3>Entidades</h3>
+    <div id="globalEntityResults"></div>
+
+    <h3>Fontes</h3>
+    <div id="globalSourceResults"></div>
+  `;
+
+  const entityBox = document.getElementById("globalEntityResults");
+  const sourceBox = document.getElementById("globalSourceResults");
+
+  if (matchedEntities.length === 0) {
+    entityBox.innerHTML = `<p class="empty">Nenhuma entidade encontrada.</p>`;
+  } else {
+    matchedEntities.forEach((entity) => {
+      const div = document.createElement("div");
+      div.className = "mini-item";
+
+      div.innerHTML = `
+        <strong>${escapeHtml(entity.name)}</strong>
+        <p>${escapeHtml(entity.type)}${entity.subtype ? " / " + escapeHtml(entity.subtype) : ""}</p>
+        ${entity.summary ? `<p>${escapeHtml(entity.summary)}</p>` : ""}
+        <button class="secondary">Abrir</button>
+      `;
+
+      div.querySelector("button").onclick = async () => {
+        await openEntityDetail(entity.id);
+      };
+
+      entityBox.appendChild(div);
+    });
+  }
+
+  if (matchedSources.length === 0) {
+    sourceBox.innerHTML = `<p class="empty">Nenhuma fonte encontrada.</p>`;
+  } else {
+    matchedSources.forEach((source) => {
+      const div = document.createElement("div");
+      div.className = "mini-item";
+
+      div.innerHTML = `
+        <strong>${escapeHtml(source.citation || source.reference || "Fonte")}</strong>
+        <p>${escapeHtml(source.source_type || "")}</p>
+        ${source.reference ? `<p>${escapeHtml(source.reference)}</p>` : ""}
+        ${source.notes ? `<p>${escapeHtml(source.notes)}</p>` : ""}
+      `;
+
+      sourceBox.appendChild(div);
+    });
+  }
+}
+
 
 function escapeHtml(value) {
   return String(value || "")
