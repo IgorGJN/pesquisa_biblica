@@ -1,6 +1,6 @@
 // sw.js
 
-const CACHE_NAME = "estudo-biblico v 0.11.0";
+const CACHE_NAME = "estudo-biblico v 0.12.4";
 
 const FILES_TO_CACHE = [
   "./",

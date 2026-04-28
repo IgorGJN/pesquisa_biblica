@@ -270,6 +270,10 @@ if (globalSearchInput) {
   globalSearchInput.addEventListener("input", handleGlobalSearch);
 }
 
+if (relType) {
+  relType.addEventListener("change", updateRelationTargetOptions);
+}
+
 
 }
 
@@ -727,14 +731,143 @@ async function openEntityDetail(entityId) {
 
   await populateDetailRelationForm(entity.id);
   await renderDetailTimeSpans(entity.id);
+  await renderDetailFamily(entity.id);
   await renderDetailRelations(entity.id);
   await renderDetailSources(entity.id);
+  
 }
 
 function closeEntityDetail() {
   if (entityDetailModal) {
     entityDetailModal.classList.add("hidden");
   }
+}
+
+async function renderDetailFamily(entityId) {
+  const block = document.getElementById("detailFamilyBlock");
+  if (!block) return;
+
+  const entity = await getRecord(STORES.entities, entityId);
+
+  if (!entity || entity.type !== "person") {
+    block.innerHTML = `<p class="empty">Família disponível apenas para pessoas.</p>`;
+    return;
+  }
+
+  const relations = await listRelations();
+  const entities = await listEntities();
+
+  const entityMap = {};
+  entities.forEach((item) => {
+    entityMap[item.id] = item;
+  });
+
+  const personRelations = relations.filter((rel) => {
+    return rel.relation_type_key === "filho_de";
+  });
+
+  const spouseRelations = relations.filter((rel) => {
+    return rel.relation_type_key === "conjuge_de";
+  });
+
+  const parents = personRelations
+    .filter((rel) => rel.source_id === entityId)
+    .map((rel) => entityMap[rel.target_id])
+    .filter(Boolean);
+
+  const children = personRelations
+    .filter((rel) => rel.target_id === entityId)
+    .map((rel) => entityMap[rel.source_id])
+    .filter(Boolean);
+
+  const spouses = spouseRelations
+    .filter((rel) => rel.source_id === entityId || rel.target_id === entityId)
+    .map((rel) => {
+      const otherId = rel.source_id === entityId ? rel.target_id : rel.source_id;
+      return entityMap[otherId];
+    })
+    .filter(Boolean);
+
+  const parentIds = parents.map((p) => p.id);
+
+  const siblingsData = getSiblingsData(entityId, parentIds, personRelations, entityMap);
+
+  const html = `
+  ${renderFamilyGroup("Pais", parents)}
+  ${renderFamilyGroup("Cônjuges", spouses)}
+  ${renderFamilyGroup("Filhos", children)}
+  ${renderFamilyGroup("Irmãos", siblingsData.fullSiblings)}
+  ${renderFamilyGroup("Meio-irmãos", siblingsData.halfSiblings)}
+`;
+
+block.innerHTML = html.trim() || `<p class="empty">Nenhum vínculo familiar registrado.</p>`;
+
+  block.querySelectorAll("[data-family-entity-id]").forEach((button) => {
+    button.onclick = async () => {
+      await openEntityDetail(button.dataset.familyEntityId);
+    };
+  });
+}
+
+function getSiblingsData(entityId, parentIds, filhoDeRelations, entityMap) {
+  const siblingMap = new Map();
+
+  filhoDeRelations.forEach((rel) => {
+    if (!parentIds.includes(rel.target_id)) return;
+    if (rel.source_id === entityId) return;
+
+    const sibling = entityMap[rel.source_id];
+    if (!sibling) return;
+
+    if (!siblingMap.has(sibling.id)) {
+      siblingMap.set(sibling.id, {
+        entity: sibling,
+        sharedParents: new Set()
+      });
+    }
+
+    siblingMap.get(sibling.id).sharedParents.add(rel.target_id);
+  });
+
+  const fullSiblings = [];
+  const halfSiblings = [];
+
+  siblingMap.forEach((data) => {
+    if (parentIds.length > 1 && data.sharedParents.size >= 2) {
+      fullSiblings.push(data.entity);
+    } else {
+      halfSiblings.push(data.entity);
+    }
+  });
+
+  return {
+    fullSiblings,
+    halfSiblings
+  };
+}
+
+function renderFamilyGroup(title, people) {
+  if (!people || people.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="family-group">
+      <strong>${escapeHtml(title)}</strong>
+
+      <div class="family-list">
+        ${people
+          .map(
+            (person) => `
+              <button class="family-chip" data-family-entity-id="${escapeHtml(person.id)}">
+                ${escapeHtml(person.name)}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
 }
 
 async function renderDetailTimeSpans(entityId) {
@@ -832,16 +965,30 @@ async function populateDetailRelationForm(currentEntityId) {
     detailRelationType.appendChild(option);
   });
 
-  detailRelationTarget.innerHTML = `<option value="">Destino</option>`;
+  async function updateDetailRelationTargetOptions() {
+    const selectedKey = detailRelationType.value;
+    const selectedType = relationTypes.find((rt) => rt.key === selectedKey);
 
-  entities
-    .filter((entity) => entity.id !== currentEntityId)
-    .forEach((entity) => {
+    detailRelationTarget.innerHTML = `<option value="">Destino</option>`;
+
+    const filteredEntities = selectedType
+      ? entities.filter((entity) =>
+          entity.id !== currentEntityId &&
+          typeIsAllowed(entity.type, selectedType.target_types)
+        )
+      : entities.filter((entity) => entity.id !== currentEntityId);
+
+    filteredEntities.forEach((entity) => {
       const option = document.createElement("option");
       option.value = entity.id;
       option.textContent = formatEntityOption(entity);
       detailRelationTarget.appendChild(option);
     });
+  }
+
+  detailRelationType.onchange = updateDetailRelationTargetOptions;
+
+  await updateDetailRelationTargetOptions();
 }
 
 async function renderDetailRelations(entityId) {
@@ -874,14 +1021,25 @@ async function renderDetailRelations(entityId) {
   }
 
   filtered.forEach((rel) => {
+    const isDirect = rel.source_id === entityId;
+
+    const relationType = relationTypeMap[rel.relation_type_key];
+
     const source = entityMap[rel.source_id];
     const target = entityMap[rel.target_id];
 
     const sourceName = source?.name || rel.source_id;
     const targetName = target?.name || rel.target_id;
 
-    const relLabel =
-      relationTypeMap[rel.relation_type_key]?.label || rel.relation_type_key;
+    const label = isDirect
+      ? relationType?.label || rel.relation_type_key
+      : relationType?.inverse_label || `inverso de ${rel.relation_type_key}`;
+
+    const firstEntityId = isDirect ? rel.source_id : rel.target_id;
+    const firstEntityName = isDirect ? sourceName : targetName;
+
+    const secondEntityId = isDirect ? rel.target_id : rel.source_id;
+    const secondEntityName = isDirect ? targetName : sourceName;
 
     const relSources = sources.filter((sourceItem) => {
       return String(sourceItem.related_relation_ids || "")
@@ -893,12 +1051,12 @@ async function renderDetailRelations(entityId) {
     div.className = "mini-item";
 
     div.innerHTML = `
-      <button class="link-button" data-entity-id="${escapeHtml(rel.source_id)}">
-        ${escapeHtml(sourceName)}
+      <button class="link-button" data-entity-id="${escapeHtml(firstEntityId)}">
+        ${escapeHtml(firstEntityName)}
       </button>
-      → ${escapeHtml(relLabel)} →
-      <button class="link-button" data-entity-id="${escapeHtml(rel.target_id)}">
-        ${escapeHtml(targetName)}
+      → ${escapeHtml(label)} →
+      <button class="link-button" data-entity-id="${escapeHtml(secondEntityId)}">
+        ${escapeHtml(secondEntityName)}
       </button>
 
       ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
@@ -1178,6 +1336,7 @@ async function populateSelects() {
 
     relType.value = currentRelType;
   }
+  await updateRelationTargetOptions();
 }
 
 // ===== TIMELINE =====
@@ -1528,6 +1687,41 @@ async function handleGlobalSearch() {
   }
 }
 
+function typeIsAllowed(entityType, allowedTypesText) {
+  if (!allowedTypesText) return true;
+
+  const allowedTypes = String(allowedTypesText)
+    .split("|")
+    .map((type) => type.trim())
+    .filter(Boolean);
+
+  return allowedTypes.includes(entityType);
+}
+
+async function updateRelationTargetOptions() {
+  if (!relType || !relTarget) return;
+
+  const selectedKey = relType.value;
+  const relationTypes = await getAllRecords(STORES.relation_types);
+  const entities = await listEntities();
+
+  const selectedType = relationTypes.find((rt) => rt.key === selectedKey);
+
+  relTarget.innerHTML = `<option value="">Selecione</option>`;
+
+  const filteredEntities = selectedType
+    ? entities.filter((entity) =>
+        typeIsAllowed(entity.type, selectedType.target_types)
+      )
+    : entities;
+
+  filteredEntities.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.textContent = formatEntityOption(entity);
+    relTarget.appendChild(option);
+  });
+}
 
 function escapeHtml(value) {
   return String(value || "")

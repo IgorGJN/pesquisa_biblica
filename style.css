@@ -413,3 +413,32 @@ button {
 .link-button:hover {
   color: #3b2f25;
 }
+
+.family-group {
+  margin-bottom: 12px;
+}
+
+.family-group > strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.family-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.family-chip {
+  border: 0;
+  background: #efe4d6;
+  color: #3b2f25;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.family-chip:hover {
+  background: #d8c1a8;
+}
