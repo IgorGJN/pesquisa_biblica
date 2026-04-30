@@ -109,6 +109,10 @@ const detailRelationType = document.getElementById("detailRelationType");
 const detailRelationTarget = document.getElementById("detailRelationTarget");
 const detailRelationList = document.getElementById("detailRelationList");
 
+const detailAddChildForm = document.getElementById("detailAddChildForm");
+const detailChildSelect = document.getElementById("detailChildSelect");
+const detailChildOtherParentSelect = document.getElementById("detailChildOtherParentSelect");
+
 // ===== ELEMENTOS: ABAS =====
 const tabs = document.querySelectorAll(".tabs button");
 const tabEntities = document.getElementById("tab-entities");
@@ -151,6 +155,7 @@ const quickSourceCitation = document.getElementById("quickSourceCitation");
 const quickSourceReference = document.getElementById("quickSourceReference");
 const quickSourceUrl = document.getElementById("quickSourceUrl");
 const quickSourceNotes = document.getElementById("quickSourceNotes");
+
 
 // ===== BUSCA GLOBAL 
 const tabSearch = document.getElementById("tab-search");
@@ -274,6 +279,9 @@ if (relType) {
   relType.addEventListener("change", updateRelationTargetOptions);
 }
 
+if (detailAddChildForm) {
+  detailAddChildForm.addEventListener("submit", handleAddChildFromDetail);
+}
 
 }
 
@@ -732,9 +740,99 @@ async function openEntityDetail(entityId) {
   await populateDetailRelationForm(entity.id);
   await renderDetailTimeSpans(entity.id);
   await renderDetailFamily(entity.id);
+  await populateDetailChildSelect(entity.id);
   await renderDetailRelations(entity.id);
   await renderDetailSources(entity.id);
   
+}
+
+async function populateDetailChildSelect(currentEntityId) {
+  if (!detailChildSelect || !detailChildOtherParentSelect) return;
+
+  const entities = await listEntities();
+  const relations = await listRelations();
+
+  const people = entities.filter(
+    (entity) => entity.type === "person" && entity.id !== currentEntityId
+  );
+
+  detailChildSelect.innerHTML = `<option value="">Selecionar filho</option>`;
+
+  people.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.textContent = formatEntityOption(entity);
+    detailChildSelect.appendChild(option);
+  });
+
+  const spouseIds = relations
+    .filter(
+      (rel) =>
+        rel.relation_type_key === "conjuge_de" &&
+        (rel.source_id === currentEntityId || rel.target_id === currentEntityId)
+    )
+    .map((rel) =>
+      rel.source_id === currentEntityId ? rel.target_id : rel.source_id
+    );
+
+  const spouses = entities.filter((entity) => spouseIds.includes(entity.id));
+
+  detailChildOtherParentSelect.innerHTML =
+    `<option value="">Outro pai/mãe (opcional)</option>`;
+
+  spouses.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.textContent = formatEntityOption(entity);
+    detailChildOtherParentSelect.appendChild(option);
+  });
+}
+
+async function handleAddChildFromDetail(event) {
+  event.preventDefault();
+
+  const parentId = detailEntityId?.value;
+  const childId = detailChildSelect?.value;
+  const otherParentId = detailChildOtherParentSelect?.value;
+
+  if (!parentId || !childId) {
+    alert("Selecione um filho.");
+    return;
+  }
+
+  const relations = await listRelations();
+
+  async function createChildRelationIfMissing(targetParentId) {
+    const alreadyExists = relations.some((rel) => {
+      return (
+        rel.relation_type_key === "filho_de" &&
+        rel.source_id === childId &&
+        rel.target_id === targetParentId
+      );
+    });
+
+    if (!alreadyExists) {
+      await createRelation({
+        source_id: childId,
+        relation_type_key: "filho_de",
+        target_id: targetParentId,
+        notes: ""
+      });
+    }
+  }
+
+  await createChildRelationIfMissing(parentId);
+
+  if (otherParentId) {
+    await createChildRelationIfMissing(otherParentId);
+  }
+
+  detailAddChildForm.reset();
+
+  await populateDetailChildSelect(parentId);
+  await renderDetailFamily(parentId);
+  await renderDetailRelations(parentId);
+  await renderRelations();
 }
 
 function closeEntityDetail() {
@@ -1031,9 +1129,7 @@ async function renderDetailRelations(entityId) {
     const sourceName = source?.name || rel.source_id;
     const targetName = target?.name || rel.target_id;
 
-    const label = isDirect
-      ? relationType?.label || rel.relation_type_key
-      : relationType?.inverse_label || `inverso de ${rel.relation_type_key}`;
+    const label = getRelationLabel(rel, relationType, isDirect, entityMap);
 
     const firstEntityId = isDirect ? rel.source_id : rel.target_id;
     const firstEntityName = isDirect ? sourceName : targetName;
@@ -1738,6 +1834,44 @@ function normalizeText(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getRelationLabel(rel, relationType, isDirect, entityMap) {
+  if (isDirect) {
+    return relationType?.label || rel.relation_type_key;
+  }
+
+  if (rel.relation_type_key === "filho_de") {
+    const currentEntity = entityMap[rel.target_id];
+
+    if (currentEntity?.subtype === "female" || currentEntity?.subtype === "mulher") {
+      return "mãe de";
+    }
+
+    if (currentEntity?.subtype === "male" || currentEntity?.subtype === "homem") {
+      return "pai de";
+    }
+
+    return "pai/mãe de";
+  }
+
+  const inverseLabels = {
+    escreveu: "escrito por",
+    conjuge_de: "cônjuge de",
+    nasceu_em: "local de nascimento de",
+    morreu_em: "local de morte de",
+    ocorreu_em: "foi local de",
+    participou_de: "teve participação de",
+    reinou_em: "teve como rei",
+    fica_em: "contém",
+    pertence_ao_periodo: "inclui"
+  };
+
+  return (
+    relationType?.inverse_label ||
+    inverseLabels[rel.relation_type_key] ||
+    `relacionado a`
+  );
 }
 
 initApp().catch((error) => {
