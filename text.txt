@@ -1,0 +1,52 @@
+/
+├─ index.html
+├─ manifest.json
+├─ sw.js
+├─ style.css
+├─ app.js                    // só inicialização geral
+│
+├─ core/
+│  ├─ db.js                  // IndexedDB baixo nível
+│  ├─ schema.js              // nomes de stores, versões, constantes
+│  ├─ migrations.js          // futuras mudanças do banco
+│  └─ repository.js          // funções genéricas add/put/get/list/delete
+│
+├─ services/
+│  ├─ entityService.js
+│  ├─ timeSpanService.js
+│  ├─ relationService.js
+│  ├─ relationTypeService.js
+│  ├─ sourceService.js
+│  ├─ familyService.js
+│  ├─ searchService.js
+│  ├─ timelineService.js
+│  ├─ graphService.js
+│  └─ backupService.js
+│
+├─ features/
+│  ├─ personWizard.js
+│  ├─ eventWizard.js
+│  ├─ randomSuggestion.js
+│  └─ importExport.js
+│
+├─ ui/
+│  ├─ dom.js
+│  ├─ tabs.js
+│  ├─ modal.js
+│  ├─ entityListView.js
+│  ├─ entityProfileView.js
+│  ├─ familyView.js
+│  ├─ timelineView.js
+│  ├─ graphView.js
+│  └─ sourceView.js
+│
+├─ utils/
+│  ├─ text.js
+│  ├─ html.js
+│  ├─ dates.js
+│  ├─ ids.js
+│  └─ constants.js
+│
+└─ vendor/
+   ├─ vis-timeline/
+   └─ cytoscape/

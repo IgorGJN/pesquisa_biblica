@@ -17,12 +17,16 @@
   />
 
   <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
+
+  <script src="https://unpkg.com/cytoscape@latest/dist/cytoscape.min.js"></script>
 </head>
 
 <body>
   <header class="app-header">
     <h1>Estudo Bíblico</h1>
+
     <div id="randomSuggestion" class="random-suggestion"></div>
+
     <p>Base local de entidades</p>
 
     <div class="tabs">
@@ -32,6 +36,7 @@
       <button data-tab="timeline">Timeline</button>
       <button data-tab="search">Busca</button>
       <button data-tab="eventWizard">Acontecimento</button>
+      <button data-tab="personWizard">Pessoa</button>
     </div>
   </header>
 
@@ -113,7 +118,7 @@
           id="filterYear"
           type="number"
           class="search"
-          placeholder="Filtrar por ano (ex: -1000)"
+          placeholder="Filtrar por ano. Ex: -1000"
         />
 
         <div id="entityList" class="entity-list"></div>
@@ -146,12 +151,12 @@
           </label>
 
           <label>
-            Início (ano)
+            Início ano
             <input id="tsStartYear" type="number" />
           </label>
 
           <label>
-            Fim (ano)
+            Fim ano
             <input id="tsEndYear" type="number" />
           </label>
 
@@ -236,19 +241,206 @@
     <!-- ========================= -->
     <!-- BUSCA GLOBAL -->
     <!-- ========================= -->
-
     <div id="tab-search" class="hidden">
-  <section class="card">
-    <h2>Busca global</h2>
+      <section class="card">
+        <h2>Busca global</h2>
 
-    <input id="globalSearchInput" class="search" placeholder="Buscar em entidades e fontes..." />
+        <input
+          id="globalSearchInput"
+          class="search"
+          placeholder="Buscar em entidades e fontes..."
+        />
 
-    <div id="globalSearchResults"></div>
-  </section>
-</div>
+        <div id="globalSearchResults"></div>
+      </section>
+    </div>
 
     <!-- ========================= -->
-    <!-- BACKUP -->
+    <!-- ASSISTENTE DE ACONTECIMENTO -->
+    <!-- ========================= -->
+    <div id="tab-eventWizard" class="hidden">
+      <section class="card">
+        <h2>Assistente de acontecimento</h2>
+
+        <form id="eventWizardForm">
+          <label>
+            Título do acontecimento
+            <input
+              id="eventWizardTitle"
+              required
+              placeholder="Ex: Invasão de Judá pelos babilônios"
+            />
+          </label>
+
+          <label>
+            Subtipo
+            <input
+              id="eventWizardSubtype"
+              placeholder="Ex: invasão, batalha, destruição..."
+            />
+          </label>
+
+          <label>
+            Ano inicial
+            <input id="eventWizardStartYear" type="number" placeholder="Ex: -605" />
+          </label>
+
+          <label>
+            Ano final
+            <input id="eventWizardEndYear" type="number" placeholder="Opcional" />
+          </label>
+
+          <label>
+            Local
+            <select id="eventWizardPlace"></select>
+          </label>
+
+          <label>
+            Participantes
+            <select id="eventWizardParticipants" multiple size="6"></select>
+          </label>
+
+          <label>
+            Fonte / Referência
+            <input id="eventWizardCitation" placeholder="Ex: 2 Reis 24" />
+          </label>
+
+          <label>
+            Observações da fonte
+            <textarea id="eventWizardNotes" rows="3"></textarea>
+          </label>
+
+          <button type="submit" class="primary">Criar acontecimento</button>
+        </form>
+
+        <p id="eventWizardStatus" class="backup-status"></p>
+      </section>
+    </div>
+
+    <!-- ========================= -->
+    <!-- ASSISTENTE DE PESSOA -->
+    <!-- ========================= -->
+    <div id="tab-personWizard" class="hidden">
+      <section class="card">
+        <h2>Assistente de pessoa</h2>
+
+        <form id="personWizardForm">
+          <label>
+            Nome
+            <input id="personWizardName" required placeholder="Ex: Davi" />
+          </label>
+
+          <label>
+            Sexo
+            <select id="personWizardGender">
+              <option value="">Não informado</option>
+              <option value="male">Masculino</option>
+              <option value="female">Feminino</option>
+            </select>
+          </label>
+
+          <label>
+            Resumo
+            <textarea
+              id="personWizardSummary"
+              rows="3"
+              placeholder="Resumo curto"
+            ></textarea>
+          </label>
+
+          <label>
+            Tags
+            <input id="personWizardTags" placeholder="Ex: rei|israel|judá" />
+          </label>
+
+          <h3>Nascimento</h3>
+
+          <label>
+            Ano de nascimento
+            <input id="personWizardBirthYear" type="number" placeholder="Ex: -1040" />
+          </label>
+
+          <label>
+            Data textual de nascimento
+            <input
+              id="personWizardBirthDateText"
+              placeholder="Ex: por volta de 1040 a.C."
+            />
+          </label>
+
+          <label>
+            Local de nascimento
+            <input id="personWizardBirthPlace" placeholder="Ex: Belém" />
+          </label>
+
+          <label>
+            Nascimento aproximado
+            <input id="personWizardBirthApprox" type="checkbox" />
+          </label>
+
+          <h3>Morte</h3>
+
+          <label>
+            Ano da morte
+            <input id="personWizardDeathYear" type="number" placeholder="Ex: -970" />
+          </label>
+
+          <label>
+            Data textual da morte
+            <input
+              id="personWizardDeathDateText"
+              placeholder="Ex: cerca de 970 a.C."
+            />
+          </label>
+
+          <label>
+            Local da morte
+            <input id="personWizardDeathPlace" placeholder="Ex: Jerusalém" />
+          </label>
+
+          <label>
+            Morte aproximada
+            <input id="personWizardDeathApprox" type="checkbox" />
+          </label>
+
+          <h3>Família</h3>
+
+          <label>
+            Pai
+            <select id="personWizardFather"></select>
+          </label>
+
+          <label>
+            Mãe
+            <select id="personWizardMother"></select>
+          </label>
+
+          <label>
+            Cônjuge
+            <select id="personWizardSpouse"></select>
+          </label>
+
+          <h3>Fonte</h3>
+
+          <label>
+            Fonte / Referência
+            <input id="personWizardCitation" placeholder="Ex: 1 Samuel 16" />
+          </label>
+
+          <label>
+            Observações da fonte
+            <textarea id="personWizardSourceNotes" rows="3"></textarea>
+          </label>
+
+          <button type="submit" class="primary">Criar pessoa</button>
+        </form>
+
+        <p id="personWizardStatus" class="backup-status"></p>
+      </section>
+    </div>
+
+    <!-- ========================= -->
+    <!-- BACKUP GOOGLE SHEETS -->
     <!-- ========================= -->
     <section class="card">
       <h2>Backup</h2>
@@ -261,6 +453,9 @@
       <p id="backupStatus" class="backup-status"></p>
     </section>
 
+    <!-- ========================= -->
+    <!-- BACKUP LOCAL JSON -->
+    <!-- ========================= -->
     <section class="card">
       <h2>Arquivo local</h2>
 
@@ -273,59 +468,6 @@
 
       <p id="fileStatus" class="backup-status"></p>
     </section>
-
-    <div id="tab-eventWizard" class="hidden">
-  <section class="card">
-    <h2>Assistente de acontecimento</h2>
-
-    <form id="eventWizardForm">
-      <label>
-        Título do acontecimento
-        <input id="eventWizardTitle" required placeholder="Ex: Invasão de Judá pelos babilônios" />
-      </label>
-
-      <label>
-        Subtipo
-        <input id="eventWizardSubtype" placeholder="Ex: invasão, batalha, destruição..." />
-      </label>
-
-      <label>
-        Ano inicial
-        <input id="eventWizardStartYear" type="number" placeholder="Ex: -605" />
-      </label>
-
-      <label>
-        Ano final
-        <input id="eventWizardEndYear" type="number" placeholder="Opcional" />
-      </label>
-
-      <label>
-        Local
-        <select id="eventWizardPlace"></select>
-      </label>
-
-      <label>
-        Participantes
-        <select id="eventWizardParticipants" multiple size="6"></select>
-      </label>
-
-      <label>
-        Fonte / Referência
-        <input id="eventWizardCitation" placeholder="Ex: 2 Reis 24" />
-      </label>
-
-      <label>
-        Observações da fonte
-        <textarea id="eventWizardNotes" rows="3"></textarea>
-      </label>
-
-      <button type="submit" class="primary">Criar acontecimento</button>
-    </form>
-
-    <p id="eventWizardStatus" class="backup-status"></p>
-  </section>
-</div>
-
   </main>
 
   <!-- ========================= -->
@@ -344,17 +486,34 @@
         <button type="button" id="editEntityFromDetail" class="secondary">Editar</button>
       </header>
 
-      <p id="detailSummary" class="muted"></p>
-
       <input type="hidden" id="detailEntityId" />
 
-      <section class="detail-section">
+      <nav class="detail-tabs">
+        <button type="button" data-detail-tab="summary" class="active">Resumo</button>
+        <button type="button" data-detail-tab="time">Cronologia</button>
+        <button type="button" data-detail-tab="family">Família</button>
+        <button type="button" data-detail-tab="graph">Árvore</button>
+        <button type="button" data-detail-tab="relations">Relações</button>
+        <button type="button" data-detail-tab="sources">Fontes</button>
+      </nav>
+
+      <!-- RESUMO -->
+      <section id="detail-tab-summary" class="detail-section detail-tab-panel">
         <div class="section-title">
-          <h3>Períodos</h3>
+          <h3>Resumo</h3>
+        </div>
+
+        <p id="detailSummary" class="muted"></p>
+      </section>
+
+      <!-- CRONOLOGIA -->
+      <section id="detail-tab-time" class="detail-section detail-tab-panel hidden">
+        <div class="section-title">
+          <h3>Cronologia</h3>
         </div>
 
         <form id="detailTimeForm" class="inline-form">
-          <input id="detailTsKind" placeholder="Tipo (vida, reinado...)" />
+          <input id="detailTsKind" placeholder="Tipo. Ex: vida, reinado..." />
           <input id="detailTsLabel" placeholder="Rótulo" />
           <input id="detailTsStart" type="number" placeholder="Início" />
           <input id="detailTsEnd" type="number" placeholder="Fim" />
@@ -364,21 +523,68 @@
         <div id="detailTimeList"></div>
       </section>
 
-<section class="detail-section">
-  <div class="section-title">
-    <h3>Família</h3>
-  </div>
+      <!-- FAMÍLIA -->
+      <section id="detail-tab-family" class="detail-section detail-tab-panel hidden">
+          <div class="section-title">
+  <h3>Família</h3>
+</div>
 
-  <form id="detailAddChildForm" class="inline-form">
+<form id="detailAddParentForm" class="inline-form">
+  <select id="detailParentSelect"></select>
+  <button type="submit" class="primary small">Adicionar pai/mãe</button>
+</form>
+
+<form id="detailAddSpouseForm" class="inline-form">
+  <select id="detailSpouseSelect"></select>
+  <button type="submit" class="primary small">Adicionar cônjuge</button>
+</form>
+
+<form id="detailAddChildForm" class="inline-form">
   <select id="detailChildSelect"></select>
   <select id="detailChildOtherParentSelect"></select>
   <button type="submit" class="primary small">Adicionar filho</button>
 </form>
 
-  <div id="detailFamilyBlock"></div>
+<div id="detailFamilyBlock"></div>
+      </section>
+
+      <section id="detail-tab-graph" class="detail-section detail-tab-panel hidden">
+  <div class="section-title">
+    <h3>Árvore genealógica</h3>
+    <button type="button" id="refreshDetailGraph" class="secondary small">
+      Atualizar
+    </button>
+  </div>
+
+  <div class="graph-controls">
+    <label>
+      Gerações acima
+      <select id="graphAncestorDepth">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </label>
+
+    <label>
+      Gerações abaixo
+      <select id="graphDescendantDepth">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="detailGraphContainer" class="family-graph"></div>
 </section>
 
-      <section class="detail-section">
+      <!-- RELAÇÕES -->
+      <section id="detail-tab-relations" class="detail-section detail-tab-panel hidden">
         <div class="section-title">
           <h3>Relações</h3>
         </div>
@@ -390,86 +596,88 @@
         </form>
 
         <div id="detailRelationList"></div>
-
       </section>
 
-      <section class="detail-section">
-  <div class="section-title">
-    <h3>Fontes / Referências</h3>
-  </div>
+      <!-- FONTES -->
+      <section id="detail-tab-sources" class="detail-section detail-tab-panel hidden">
+        <div class="section-title">
+          <h3>Fontes / Referências</h3>
+        </div>
 
-  <form id="detailSourceForm" class="inline-form">
-    <select id="detailSourceType">
-      <option value="biblical">Bíblica</option>
-      <option value="historical">Histórica</option>
-      <option value="archaeological">Arqueológica</option>
-      <option value="personal_note">Nota pessoal</option>
-    </select>
+        <form id="detailSourceForm" class="inline-form">
+          <select id="detailSourceType">
+            <option value="biblical">Bíblica</option>
+            <option value="historical">Histórica</option>
+            <option value="archaeological">Arqueológica</option>
+            <option value="personal_note">Nota pessoal</option>
+          </select>
 
-    <input id="detailSourceCitation" placeholder="Referência. Ex: 1 Samuel 16" />
-    <input id="detailSourceReference" placeholder="Descrição curta" />
-    <input id="detailSourceUrl" placeholder="Link opcional" />
+          <input id="detailSourceCitation" placeholder="Referência. Ex: 1 Samuel 16" />
+          <input id="detailSourceReference" placeholder="Descrição curta" />
+          <input id="detailSourceUrl" placeholder="Link opcional" />
 
-    <button type="submit" class="primary small">Adicionar</button>
-  </form>
+          <button type="submit" class="primary small">Adicionar</button>
+        </form>
 
-  <textarea
-    id="detailSourceNotes"
-    rows="3"
-    placeholder="Observações da fonte"
-  ></textarea>
+        <textarea
+          id="detailSourceNotes"
+          rows="3"
+          placeholder="Observações da fonte"
+        ></textarea>
 
-  <div id="detailSourceList"></div>
-</section>
-
+        <div id="detailSourceList"></div>
+      </section>
     </div>
   </div>
 
-<div id="quickSourceModal" class="modal hidden">
-  <div class="modal-content">
-    <button type="button" id="closeQuickSource" class="close">✕</button>
+  <!-- ========================= -->
+  <!-- MODAL RÁPIDO DE FONTE -->
+  <!-- ========================= -->
+  <div id="quickSourceModal" class="modal hidden">
+    <div class="modal-content">
+      <button type="button" id="closeQuickSource" class="close">✕</button>
 
-    <h2>Adicionar fonte</h2>
+      <h2>Adicionar fonte</h2>
 
-    <form id="quickSourceForm">
-      <input type="hidden" id="quickSourceEntityId" />
-      <input type="hidden" id="quickSourceTimeSpanId" />
-      <input type="hidden" id="quickSourceRelationId" />
+      <form id="quickSourceForm">
+        <input type="hidden" id="quickSourceEntityId" />
+        <input type="hidden" id="quickSourceTimeSpanId" />
+        <input type="hidden" id="quickSourceRelationId" />
 
-      <label>
-        Tipo da fonte
-        <select id="quickSourceType">
-          <option value="biblical">Bíblica</option>
-          <option value="historical">Histórica</option>
-          <option value="archaeological">Arqueológica</option>
-          <option value="personal_note">Nota pessoal</option>
-        </select>
-      </label>
+        <label>
+          Tipo da fonte
+          <select id="quickSourceType">
+            <option value="biblical">Bíblica</option>
+            <option value="historical">Histórica</option>
+            <option value="archaeological">Arqueológica</option>
+            <option value="personal_note">Nota pessoal</option>
+          </select>
+        </label>
 
-      <label>
-        Referência
-        <input id="quickSourceCitation" placeholder="Ex: 1 Samuel 16" />
-      </label>
+        <label>
+          Referência
+          <input id="quickSourceCitation" placeholder="Ex: 1 Samuel 16" />
+        </label>
 
-      <label>
-        Descrição curta
-        <input id="quickSourceReference" placeholder="Ex: Unção de Davi" />
-      </label>
+        <label>
+          Descrição curta
+          <input id="quickSourceReference" placeholder="Ex: Unção de Davi" />
+        </label>
 
-      <label>
-        Link
-        <input id="quickSourceUrl" placeholder="Opcional" />
-      </label>
+        <label>
+          Link
+          <input id="quickSourceUrl" placeholder="Opcional" />
+        </label>
 
-      <label>
-        Observações
-        <textarea id="quickSourceNotes" rows="3"></textarea>
-      </label>
+        <label>
+          Observações
+          <textarea id="quickSourceNotes" rows="3"></textarea>
+        </label>
 
-      <button type="submit" class="primary">Salvar fonte</button>
-    </form>
+        <button type="submit" class="primary">Salvar fonte</button>
+      </form>
+    </div>
   </div>
-</div>
 
   <script type="module" src="app.js?v=0.3"></script>
 

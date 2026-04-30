@@ -44,6 +44,18 @@ import {
   deleteSource
 } from "./sourceService.js";
 
+import { normalizeText, capitalize } from "./utils/text.js";
+import { escapeHtml } from "./utils/html.js";
+import { formatYear, formatPeriod, yearToVisDate } from "./utils/dates.js";
+
+import { getFamilySummary } from "./familyService.js";
+
+import { createOrUpdateEventFromWizard } from "./eventService.js";
+
+import { createOrUpdatePersonFromWizard } from "./personService.js";
+
+import { renderFamilyGraphView } from "./graphView.js";
+
 const DEFAULT_APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwZaZy20etEXXhryfSSnLKKoQn_yTL_bKqyUyCMhYBspJ4TmWxgWzcO4Rrm9vqGY7o-/exec";
 
@@ -112,6 +124,14 @@ const detailRelationList = document.getElementById("detailRelationList");
 const detailAddChildForm = document.getElementById("detailAddChildForm");
 const detailChildSelect = document.getElementById("detailChildSelect");
 const detailChildOtherParentSelect = document.getElementById("detailChildOtherParentSelect");
+const detailAddParentForm = document.getElementById("detailAddParentForm");
+const detailParentSelect = document.getElementById("detailParentSelect");
+
+const detailAddSpouseForm = document.getElementById("detailAddSpouseForm");
+const detailSpouseSelect = document.getElementById("detailSpouseSelect");
+
+
+
 
 // ===== ELEMENTOS: ABAS =====
 const tabs = document.querySelectorAll(".tabs button");
@@ -176,6 +196,43 @@ const eventWizardCitation = document.getElementById("eventWizardCitation");
 const eventWizardNotes = document.getElementById("eventWizardNotes");
 const eventWizardStatus = document.getElementById("eventWizardStatus"); 
 
+// ===== CADASTRO PESSOAS
+// ===== ASSISTENTE DE PESSOA
+const tabPersonWizard = document.getElementById("tab-personWizard");
+
+const personWizardForm = document.getElementById("personWizardForm");
+const personWizardName = document.getElementById("personWizardName");
+const personWizardGender = document.getElementById("personWizardGender");
+const personWizardSummary = document.getElementById("personWizardSummary");
+const personWizardTags = document.getElementById("personWizardTags");
+
+const personWizardBirthYear = document.getElementById("personWizardBirthYear");
+const personWizardBirthDateText = document.getElementById("personWizardBirthDateText");
+const personWizardBirthPlace = document.getElementById("personWizardBirthPlace");
+const personWizardBirthApprox = document.getElementById("personWizardBirthApprox");
+
+const personWizardDeathYear = document.getElementById("personWizardDeathYear");
+const personWizardDeathDateText = document.getElementById("personWizardDeathDateText");
+const personWizardDeathPlace = document.getElementById("personWizardDeathPlace");
+const personWizardDeathApprox = document.getElementById("personWizardDeathApprox");
+
+const personWizardFather = document.getElementById("personWizardFather");
+const personWizardMother = document.getElementById("personWizardMother");
+const personWizardSpouse = document.getElementById("personWizardSpouse");
+
+const personWizardCitation = document.getElementById("personWizardCitation");
+const personWizardSourceNotes = document.getElementById("personWizardSourceNotes");
+const personWizardStatus = document.getElementById("personWizardStatus");
+
+const detailTabButtons = document.querySelectorAll("[data-detail-tab]");
+const detailTabPanels = document.querySelectorAll(".detail-tab-panel");
+
+// ===== ELEMENTOS ARVORE
+const detailGraphContainer = document.getElementById("detailGraphContainer");
+const refreshDetailGraph = document.getElementById("refreshDetailGraph");
+const graphAncestorDepth = document.getElementById("graphAncestorDepth");
+const graphDescendantDepth = document.getElementById("graphDescendantDepth");
+
 // ===== INIT =====
 async function initApp() {
   if (appStarted) return;
@@ -234,6 +291,12 @@ async function initApp() {
     });
   }
 
+  detailTabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    switchDetailTab(button.dataset.detailTab);
+  });
+});
+
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => switchTab(tab.dataset.tab));
   });
@@ -268,6 +331,7 @@ async function initApp() {
       await renderEntities();
       await populateSelects();
       await populateEventWizardSelects();
+      await populatePersonWizardSelects();
       await renderTimeSpans();
       await renderRelations();
       await renderTimeline();
@@ -298,11 +362,42 @@ if (detailAddChildForm) {
   detailAddChildForm.addEventListener("submit", handleAddChildFromDetail);
 }
 
+if (detailAddParentForm) {
+  detailAddParentForm.addEventListener("submit", handleAddParentFromDetail);
+}
+
+if (detailAddSpouseForm) {
+  detailAddSpouseForm.addEventListener("submit", handleAddSpouseFromDetail);
+}
+
+if (detailAddChildForm) {
+  detailAddChildForm.addEventListener("submit", handleAddChildFromDetail);
+}
+
 if (eventWizardForm) {
   eventWizardForm.addEventListener("submit", handleEventWizardSubmit);
 }
 
 await populateEventWizardSelects();
+
+if (personWizardForm) {
+  personWizardForm.addEventListener("submit", handlePersonWizardSubmit);
+}
+
+await populatePersonWizardSelects();
+
+if (refreshDetailGraph) {
+  refreshDetailGraph.addEventListener("click", renderCurrentDetailGraph);
+}
+
+if (graphAncestorDepth) {
+  graphAncestorDepth.addEventListener("change", renderCurrentDetailGraph);
+}
+
+if (graphDescendantDepth) {
+  graphDescendantDepth.addEventListener("change", renderCurrentDetailGraph);
+}
+
 
 }
 
@@ -356,6 +451,7 @@ async function handleSubmit(event) {
     await renderEntities();
     await populateSelects();
     await populateEventWizardSelects();
+    await populatePersonWizardSelects();
     await renderTimeSpans();
     await renderRelations();
     await renderTimeline();
@@ -730,6 +826,140 @@ async function renderRelations() {
   });
 }
 
+async function renderDetailRelations(entityId) {
+  if (!detailRelationList) return;
+
+  const relations = await listRelations();
+  const entities = await listEntities();
+  const relationTypes = await getAllRecords(STORES.relation_types);
+  const sources = await listSources();
+
+  const entityMap = {};
+  entities.forEach((entity) => {
+    entityMap[entity.id] = entity;
+  });
+
+  const relationTypeMap = {};
+  relationTypes.forEach((rt) => {
+    relationTypeMap[rt.key] = rt;
+  });
+
+  const FAMILY_RELATION_KEYS = ["filho_de", "conjuge_de"];
+
+const filtered = relations.filter((rel) => {
+  const involvesEntity =
+    rel.source_id === entityId || rel.target_id === entityId;
+
+  const isFamilyRelation = FAMILY_RELATION_KEYS.includes(
+    rel.relation_type_key
+  );
+
+  return involvesEntity && !isFamilyRelation;
+});
+
+  detailRelationList.innerHTML = "";
+
+  if (filtered.length === 0) {
+    detailRelationList.innerHTML = `<p class="empty">Sem relações.</p>`;
+    return;
+  }
+
+  filtered.forEach((rel) => {
+    const isDirect = rel.source_id === entityId;
+
+    const relationType = relationTypeMap[rel.relation_type_key];
+
+    const source = entityMap[rel.source_id];
+    const target = entityMap[rel.target_id];
+
+    const sourceName = source?.name || rel.source_id;
+    const targetName = target?.name || rel.target_id;
+
+    const label = getRelationLabel(rel, relationType, isDirect, entityMap);
+
+    const firstEntityId = isDirect ? rel.source_id : rel.target_id;
+    const firstEntityName = isDirect ? sourceName : targetName;
+
+    const secondEntityId = isDirect ? rel.target_id : rel.source_id;
+    const secondEntityName = isDirect ? targetName : sourceName;
+
+    const relSources = sources.filter((sourceItem) => {
+      return String(sourceItem.related_relation_ids || "")
+        .split("|")
+        .includes(rel.id);
+    });
+
+    const div = document.createElement("div");
+    div.className = "mini-item";
+
+    div.innerHTML = `
+      <button class="link-button" data-entity-id="${escapeHtml(firstEntityId)}">
+        ${escapeHtml(firstEntityName)}
+      </button>
+      → ${escapeHtml(label)} →
+      <button class="link-button" data-entity-id="${escapeHtml(secondEntityId)}">
+        ${escapeHtml(secondEntityName)}
+      </button>
+
+      ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
+
+      ${
+        relSources.length
+          ? `<div class="source-list">
+              ${relSources
+                .map(
+                  (src) => `
+                    <div class="source-chip">
+                      Fonte: ${escapeHtml(src.citation || src.reference || "Sem título")}
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+
+      <div class="entity-actions">
+        <button class="edit" data-action="edit">Editar</button>
+        <button class="secondary" data-action="source">Fonte</button>
+        <button class="danger" data-action="delete">Excluir</button>
+      </div>
+    `;
+
+    div.querySelectorAll(".link-button").forEach((button) => {
+      button.onclick = async () => {
+        const nextEntityId = button.dataset.entityId;
+        if (!nextEntityId) return;
+
+        await openEntityDetail(nextEntityId);
+      };
+    });
+
+    div.querySelector('[data-action="edit"]').onclick = () => {
+      closeEntityDetail();
+      fillRelationForm(rel);
+    };
+
+    div.querySelector('[data-action="source"]').onclick = () => {
+      openQuickSourceForm({
+        entityId,
+        relationId: rel.id
+      });
+    };
+
+    div.querySelector('[data-action="delete"]').onclick = async () => {
+      const ok = confirm("Excluir esta relação?");
+      if (!ok) return;
+
+      await deleteRelation(rel.id);
+      await renderDetailRelations(entityId);
+      await renderRelations();
+    };
+
+    detailRelationList.appendChild(div);
+  });
+}
+
 function fillRelationForm(rel) {
   relationIdInput.value = rel.id;
   relSource.value = rel.source_id || "";
@@ -750,6 +980,7 @@ async function openEntityDetail(entityId) {
   if (!entity) return;
 
   entityDetailModal.classList.remove("hidden");
+  switchDetailTab("summary");
 
   detailName.textContent = entity.name || "Sem nome";
   detailType.textContent = `${entity.type || ""}${
@@ -759,33 +990,82 @@ async function openEntityDetail(entityId) {
 
   detailEntityId.value = entity.id;
 
-  await populateDetailRelationForm(entity.id);
-  await renderDetailTimeSpans(entity.id);
-  await renderDetailFamily(entity.id);
-  await populateDetailChildSelect(entity.id);
-  await renderDetailRelations(entity.id);
-  await renderDetailSources(entity.id);
+await populateDetailRelationForm(entity.id);
+await renderDetailTimeSpans(entity.id);
+await renderDetailFamily(entity.id);
+await populateDetailParentSelect(entity.id);
+await populateDetailSpouseSelect(entity.id);
+await populateDetailChildSelect(entity.id);
+await renderDetailRelations(entity.id);
+await renderDetailSources(entity.id);
   
 }
 
-async function populateDetailChildSelect(currentEntityId) {
-  if (!detailChildSelect || !detailChildOtherParentSelect) return;
+async function populateDetailParentSelect(currentEntityId) {
+  if (!detailParentSelect) return;
 
   const entities = await listEntities();
   const relations = await listRelations();
 
-  const people = entities.filter(
-    (entity) => entity.type === "person" && entity.id !== currentEntityId
-  );
+  const currentParentIds = relations
+    .filter(
+      (rel) =>
+        rel.relation_type_key === "filho_de" &&
+        rel.source_id === currentEntityId
+    )
+    .map((rel) => rel.target_id);
 
-  detailChildSelect.innerHTML = `<option value="">Selecionar filho</option>`;
+  const people = entities.filter((entity) => {
+    return (
+      entity.type === "person" &&
+      entity.id !== currentEntityId &&
+      !currentParentIds.includes(entity.id)
+    );
+  });
+
+  detailParentSelect.innerHTML = `<option value="">Selecionar pai/mãe</option>`;
 
   people.forEach((entity) => {
     const option = document.createElement("option");
     option.value = entity.id;
     option.textContent = formatEntityOption(entity);
-    detailChildSelect.appendChild(option);
+    detailParentSelect.appendChild(option);
   });
+}
+
+async function handleAddParentFromDetail(event) {
+  event.preventDefault();
+
+  const currentEntityId = detailEntityId?.value;
+  const parentId = detailParentSelect?.value;
+
+  if (!currentEntityId || !parentId) {
+    alert("Selecione um pai/mãe.");
+    return;
+  }
+
+  await createRelation({
+    source_id: currentEntityId,
+    relation_type_key: "filho_de",
+    target_id: parentId,
+    notes: ""
+  });
+
+  detailAddParentForm.reset();
+
+  await populateDetailParentSelect(currentEntityId);
+  await populateDetailSpouseSelect(currentEntityId);
+  await populateDetailChildSelect(currentEntityId);
+  await renderDetailFamily(currentEntityId);
+  await renderDetailRelations(currentEntityId);
+  await renderRelations();
+}
+
+async function populateDetailSpouseSelect(currentEntityId) {
+  if (!detailSpouseSelect) return;
+
+  const entities = await listEntities();
+  const relations = await listRelations();
 
   const spouseIds = relations
     .filter(
@@ -797,10 +1077,90 @@ async function populateDetailChildSelect(currentEntityId) {
       rel.source_id === currentEntityId ? rel.target_id : rel.source_id
     );
 
-  const spouses = entities.filter((entity) => spouseIds.includes(entity.id));
+  const people = entities.filter((entity) => {
+    return (
+      entity.type === "person" &&
+      entity.id !== currentEntityId &&
+      !spouseIds.includes(entity.id)
+    );
+  });
+
+  detailSpouseSelect.innerHTML = `<option value="">Selecionar cônjuge</option>`;
+
+  people.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.textContent = formatEntityOption(entity);
+    detailSpouseSelect.appendChild(option);
+  });
+}
+
+async function handleAddSpouseFromDetail(event) {
+  event.preventDefault();
+
+  const currentEntityId = detailEntityId?.value;
+  const spouseId = detailSpouseSelect?.value;
+
+  if (!currentEntityId || !spouseId) {
+    alert("Selecione um cônjuge.");
+    return;
+  }
+
+  await createRelation({
+    source_id: currentEntityId,
+    relation_type_key: "conjuge_de",
+    target_id: spouseId,
+    notes: ""
+  });
+
+  detailAddSpouseForm.reset();
+
+  await populateDetailParentSelect(currentEntityId);
+  await populateDetailSpouseSelect(currentEntityId);
+  await populateDetailChildSelect(currentEntityId);
+  await renderDetailFamily(currentEntityId);
+  await renderDetailRelations(currentEntityId);
+  await renderRelations();
+}
+
+async function populateDetailChildSelect(currentEntityId) {
+  if (!detailChildSelect || !detailChildOtherParentSelect) return;
+
+  const entities = await listEntities();
+  const relations = await listRelations();
+
+  const people = entities.filter((entity) => {
+    return entity.type === "person" && entity.id !== currentEntityId;
+  });
+
+  detailChildSelect.innerHTML = `<option value="">Selecionar filho</option>`;
+
+  people.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.textContent = formatEntityOption(entity);
+    detailChildSelect.appendChild(option);
+  });
+
+  const spouseIds = relations
+    .filter((rel) => {
+      return (
+        rel.relation_type_key === "conjuge_de" &&
+        (rel.source_id === currentEntityId || rel.target_id === currentEntityId)
+      );
+    })
+    .map((rel) => {
+      return rel.source_id === currentEntityId
+        ? rel.target_id
+        : rel.source_id;
+    });
+
+  const spouses = entities.filter((entity) => {
+    return spouseIds.includes(entity.id);
+  });
 
   detailChildOtherParentSelect.innerHTML =
-    `<option value="">Outro pai/mãe (opcional)</option>`;
+    `<option value="">Outro pai/mãe opcional</option>`;
 
   spouses.forEach((entity) => {
     const option = document.createElement("option");
@@ -851,11 +1211,60 @@ async function handleAddChildFromDetail(event) {
 
   detailAddChildForm.reset();
 
-  await populateDetailChildSelect(parentId);
-  await renderDetailFamily(parentId);
-  await renderDetailRelations(parentId);
-  await renderRelations();
+await populateDetailParentSelect(parentId);
+await populateDetailSpouseSelect(parentId);
+await populateDetailChildSelect(parentId);
+await renderDetailFamily(parentId);
+await renderDetailRelations(parentId);
+await renderRelations();
 }
+
+function switchDetailTab(tab) {
+  detailTabButtons.forEach((button) => {
+    const isActive = button.dataset.detailTab === tab;
+    button.classList.toggle("active", isActive);
+  });
+
+  detailTabPanels.forEach((panel) => {
+    panel.classList.add("hidden");
+  });
+
+  const activePanel = document.getElementById(`detail-tab-${tab}`);
+
+  if (activePanel) {
+    activePanel.classList.remove("hidden");
+  }
+
+  if (tab === "graph") {
+  renderCurrentDetailGraph();
+}
+}
+
+async function renderCurrentDetailGraph() {
+  if (!detailGraphContainer) return;
+
+  const entityId = detailEntityId?.value;
+
+  if (!entityId) {
+    detailGraphContainer.innerHTML = `<p class="empty">Nenhuma entidade selecionada.</p>`;
+    return;
+  }
+
+  const ancestorDepth = Number(graphAncestorDepth?.value || 3);
+  const descendantDepth = Number(graphDescendantDepth?.value || 3);
+
+  await renderFamilyGraphView({
+    container: detailGraphContainer,
+    entityId,
+    ancestorDepth,
+    descendantDepth,
+    includeSpouses: true,
+    onNodeClick: async (clickedEntityId) => {
+      await openEntityDetail(clickedEntityId);
+    }
+  });
+}
+
 
 function closeEntityDetail() {
   if (entityDetailModal) {
@@ -863,108 +1272,9 @@ function closeEntityDetail() {
   }
 }
 
-async function renderDetailFamily(entityId) {
-  const block = document.getElementById("detailFamilyBlock");
-  if (!block) return;
 
-  const entity = await getRecord(STORES.entities, entityId);
 
-  if (!entity || entity.type !== "person") {
-    block.innerHTML = `<p class="empty">Família disponível apenas para pessoas.</p>`;
-    return;
-  }
 
-  const relations = await listRelations();
-  const entities = await listEntities();
-
-  const entityMap = {};
-  entities.forEach((item) => {
-    entityMap[item.id] = item;
-  });
-
-  const personRelations = relations.filter((rel) => {
-    return rel.relation_type_key === "filho_de";
-  });
-
-  const spouseRelations = relations.filter((rel) => {
-    return rel.relation_type_key === "conjuge_de";
-  });
-
-  const parents = personRelations
-    .filter((rel) => rel.source_id === entityId)
-    .map((rel) => entityMap[rel.target_id])
-    .filter(Boolean);
-
-  const children = personRelations
-    .filter((rel) => rel.target_id === entityId)
-    .map((rel) => entityMap[rel.source_id])
-    .filter(Boolean);
-
-  const spouses = spouseRelations
-    .filter((rel) => rel.source_id === entityId || rel.target_id === entityId)
-    .map((rel) => {
-      const otherId = rel.source_id === entityId ? rel.target_id : rel.source_id;
-      return entityMap[otherId];
-    })
-    .filter(Boolean);
-
-  const parentIds = parents.map((p) => p.id);
-
-  const siblingsData = getSiblingsData(entityId, parentIds, personRelations, entityMap);
-
-  const html = `
-  ${renderFamilyGroup("Pais", parents)}
-  ${renderFamilyGroup("Cônjuges", spouses)}
-  ${renderFamilyGroup("Filhos", children)}
-  ${renderFamilyGroup("Irmãos", siblingsData.fullSiblings)}
-  ${renderFamilyGroup("Meio-irmãos", siblingsData.halfSiblings)}
-`;
-
-block.innerHTML = html.trim() || `<p class="empty">Nenhum vínculo familiar registrado.</p>`;
-
-  block.querySelectorAll("[data-family-entity-id]").forEach((button) => {
-    button.onclick = async () => {
-      await openEntityDetail(button.dataset.familyEntityId);
-    };
-  });
-}
-
-function getSiblingsData(entityId, parentIds, filhoDeRelations, entityMap) {
-  const siblingMap = new Map();
-
-  filhoDeRelations.forEach((rel) => {
-    if (!parentIds.includes(rel.target_id)) return;
-    if (rel.source_id === entityId) return;
-
-    const sibling = entityMap[rel.source_id];
-    if (!sibling) return;
-
-    if (!siblingMap.has(sibling.id)) {
-      siblingMap.set(sibling.id, {
-        entity: sibling,
-        sharedParents: new Set()
-      });
-    }
-
-    siblingMap.get(sibling.id).sharedParents.add(rel.target_id);
-  });
-
-  const fullSiblings = [];
-  const halfSiblings = [];
-
-  siblingMap.forEach((data) => {
-    if (parentIds.length > 1 && data.sharedParents.size >= 2) {
-      fullSiblings.push(data.entity);
-    } else {
-      halfSiblings.push(data.entity);
-    }
-  });
-
-  return {
-    fullSiblings,
-    halfSiblings
-  };
-}
 
 function renderFamilyGroup(title, people) {
   if (!people || people.length === 0) {
@@ -1111,128 +1421,33 @@ async function populateDetailRelationForm(currentEntityId) {
   await updateDetailRelationTargetOptions();
 }
 
-async function renderDetailRelations(entityId) {
-  if (!detailRelationList) return;
+async function renderDetailFamily(entityId) {
+  const block = document.getElementById("detailFamilyBlock");
+  if (!block) return;
 
-  const relations = await listRelations();
-  const entities = await listEntities();
-  const relationTypes = await getAllRecords(STORES.relation_types);
-  const sources = await listSources();
+  const family = await getFamilySummary(entityId);
+  const entity = family.entity;
 
-  const entityMap = {};
-  entities.forEach((entity) => {
-    entityMap[entity.id] = entity;
-  });
-
-  const relationTypeMap = {};
-  relationTypes.forEach((rt) => {
-    relationTypeMap[rt.key] = rt;
-  });
-
-  const filtered = relations.filter((rel) => {
-    return rel.source_id === entityId || rel.target_id === entityId;
-  });
-
-  detailRelationList.innerHTML = "";
-
-  if (filtered.length === 0) {
-    detailRelationList.innerHTML = `<p class="empty">Sem relações.</p>`;
+  if (!entity || entity.type !== "person") {
+    block.innerHTML = `<p class="empty">Família disponível apenas para pessoas.</p>`;
     return;
   }
 
-  filtered.forEach((rel) => {
-    const isDirect = rel.source_id === entityId;
+  const html = `
+    ${renderFamilyGroup("Pais", family.parents)}
+    ${renderFamilyGroup("Cônjuges", family.spouses)}
+    ${renderFamilyGroup("Filhos", family.children)}
+    ${renderFamilyGroup("Irmãos", family.siblings)}
+    ${renderFamilyGroup("Meio-irmãos", family.halfSiblings)}
+  `;
 
-    const relationType = relationTypeMap[rel.relation_type_key];
+  block.innerHTML =
+    html.trim() || `<p class="empty">Nenhum vínculo familiar registrado.</p>`;
 
-    const source = entityMap[rel.source_id];
-    const target = entityMap[rel.target_id];
-
-    const sourceName = source?.name || rel.source_id;
-    const targetName = target?.name || rel.target_id;
-
-    const label = getRelationLabel(rel, relationType, isDirect, entityMap);
-
-    const firstEntityId = isDirect ? rel.source_id : rel.target_id;
-    const firstEntityName = isDirect ? sourceName : targetName;
-
-    const secondEntityId = isDirect ? rel.target_id : rel.source_id;
-    const secondEntityName = isDirect ? targetName : sourceName;
-
-    const relSources = sources.filter((sourceItem) => {
-      return String(sourceItem.related_relation_ids || "")
-        .split("|")
-        .includes(rel.id);
-    });
-
-    const div = document.createElement("div");
-    div.className = "mini-item";
-
-    div.innerHTML = `
-      <button class="link-button" data-entity-id="${escapeHtml(firstEntityId)}">
-        ${escapeHtml(firstEntityName)}
-      </button>
-      → ${escapeHtml(label)} →
-      <button class="link-button" data-entity-id="${escapeHtml(secondEntityId)}">
-        ${escapeHtml(secondEntityName)}
-      </button>
-
-      ${rel.notes ? `<p>${escapeHtml(rel.notes)}</p>` : ""}
-
-      ${
-        relSources.length
-          ? `<div class="source-list">
-              ${relSources
-                .map(
-                  (src) => `
-                    <div class="source-chip">
-                      Fonte: ${escapeHtml(src.citation || src.reference || "Sem título")}
-                    </div>
-                  `
-                )
-                .join("")}
-            </div>`
-          : ""
-      }
-
-      <div class="entity-actions">
-        <button class="edit" data-action="edit">Editar</button>
-        <button class="secondary" data-action="source">Fonte</button>
-        <button class="danger" data-action="delete">Excluir</button>
-      </div>
-    `;
-
-    div.querySelectorAll(".link-button").forEach((button) => {
-      button.onclick = async () => {
-        const nextEntityId = button.dataset.entityId;
-        if (!nextEntityId) return;
-
-        await openEntityDetail(nextEntityId);
-      };
-    });
-
-    div.querySelector('[data-action="edit"]').onclick = () => {
-      closeEntityDetail();
-      fillRelationForm(rel);
+  block.querySelectorAll("[data-family-entity-id]").forEach((button) => {
+    button.onclick = async () => {
+      await openEntityDetail(button.dataset.familyEntityId);
     };
-
-    div.querySelector('[data-action="source"]').onclick = () => {
-      openQuickSourceForm({
-        entityId,
-        relationId: rel.id
-      });
-    };
-
-    div.querySelector('[data-action="delete"]').onclick = async () => {
-      const ok = confirm("Excluir esta relação?");
-      if (!ok) return;
-
-      await deleteRelation(rel.id);
-      await renderDetailRelations(entityId);
-      await renderRelations();
-    };
-
-    detailRelationList.appendChild(div);
   });
 }
 
@@ -1557,12 +1772,6 @@ async function renderTimeline() {
   });
 }
 
-function yearToVisDate(year) {
-  const date = new Date(0);
-  date.setUTCFullYear(year, 0, 1);
-  date.setUTCHours(0, 0, 0, 0);
-  return date;
-}
 
 // ===== BACKUP =====
 async function handleBackup() {
@@ -1599,6 +1808,7 @@ async function handleRestore() {
     await renderEntities();
     await populateSelects();
     await populateEventWizardSelects();
+    await populatePersonWizardSelects();
     await renderTimeSpans();
     await renderRelations();
     await renderTimeline();
@@ -1647,11 +1857,6 @@ function formatEntityOption(entity) {
   return `${entity.name} (${type}${subtype})`;
 }
 
-function capitalize(text) {
-  return String(text || "")
-    .charAt(0)
-    .toUpperCase() + String(text || "").slice(1);
-}
 
 // ===== ABAS =====
 function switchTab(tab) {
@@ -1660,66 +1865,52 @@ function switchTab(tab) {
   const activeTab = document.querySelector(`[data-tab="${tab}"]`);
   if (activeTab) activeTab.classList.add("active");
 
+  // Esconde todas as abas principais
   if (tabEntities) tabEntities.classList.add("hidden");
   if (tabTime) tabTime.classList.add("hidden");
   if (tabRelations) tabRelations.classList.add("hidden");
   if (tabTimeline) tabTimeline.classList.add("hidden");
+  if (tabSearch) tabSearch.classList.add("hidden");
+  if (tabEventWizard) tabEventWizard.classList.add("hidden");
+  if (tabPersonWizard) tabPersonWizard.classList.add("hidden");
 
-  if (tab === "entities" && tabEntities) tabEntities.classList.remove("hidden");
-  if (tab === "time" && tabTime) tabTime.classList.remove("hidden");
-  if (tab === "relations" && tabRelations) tabRelations.classList.remove("hidden");
+  // Mostra apenas a aba selecionada
+  if (tab === "entities" && tabEntities) {
+    tabEntities.classList.remove("hidden");
+  }
+
+  if (tab === "time" && tabTime) {
+    tabTime.classList.remove("hidden");
+  }
+
+  if (tab === "relations" && tabRelations) {
+    tabRelations.classList.remove("hidden");
+  }
 
   if (tab === "timeline" && tabTimeline) {
     tabTimeline.classList.remove("hidden");
     renderTimeline();
   }
 
-  if (tabSearch) tabSearch.classList.add("hidden");
   if (tab === "search" && tabSearch) {
-  tabSearch.classList.remove("hidden");
-} 
+    tabSearch.classList.remove("hidden");
+  }
 
-if (tabEventWizard) tabEventWizard.classList.add("hidden");
+  if (tab === "eventWizard" && tabEventWizard) {
+    tabEventWizard.classList.remove("hidden");
+    populateEventWizardSelects();
+  }
 
-if (tab === "eventWizard" && tabEventWizard) {
-  tabEventWizard.classList.remove("hidden");
-  populateEventWizardSelects();
-}
+  if (tab === "personWizard" && tabPersonWizard) {
+    tabPersonWizard.classList.remove("hidden");
+    populatePersonWizardSelects();
+  }
 }
 
 // ===== FORMATOS / UTIL =====
-function formatYear(year) {
-  if (year === null || year === undefined || year === "") return "?";
 
-  const y = Number(year);
 
-  if (y < 0) {
-    return `${Math.abs(y)} a.C.`;
-  }
 
-  return `${y} d.C.`;
-}
-
-function formatPeriod(start, end) {
-  const hasStart = start !== null && start !== undefined && start !== "";
-  const hasEnd = end !== null && end !== undefined && end !== "";
-
-  if (!hasStart && !hasEnd) return "Período não informado";
-
-  if (hasStart && hasEnd) {
-    return `${formatYear(start)} → ${formatYear(end)}`;
-  }
-
-  if (hasStart && !hasEnd) {
-    return `desde ${formatYear(start)}`;
-  }
-
-  if (!hasStart && hasEnd) {
-    return `até ${formatYear(end)}`;
-  }
-
-  return "Período não informado";
-}
 
 
 async function handleGlobalSearch() {
@@ -1849,22 +2040,7 @@ async function updateRelationTargetOptions() {
   });
 }
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
-function normalizeText(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 function getRelationLabel(rel, relationType, isDirect, entityMap) {
   if (isDirect) {
@@ -1946,66 +2122,27 @@ async function handleEventWizardSubmit(event) {
   try {
     setEventWizardStatus("Processando acontecimento...");
 
-    const eventEntity = await ensureEventEntity({
-      name: title,
-      subtype: eventWizardSubtype.value.trim()
-    });
-
-    const startYear = eventWizardStartYear.value;
-    const endYear = eventWizardEndYear.value || eventWizardStartYear.value;
-
-    if (startYear) {
-      await ensureTimeSpan({
-        entity_id: eventEntity.id,
-        kind: "occurrence",
-        label: title,
-        start_year: startYear,
-        end_year: endYear,
-        start_approx: false,
-        end_approx: false
-      });
-    }
-
-    if (eventWizardPlace.value) {
-      await ensureRelation({
-        source_id: eventEntity.id,
-        relation_type_key: "ocorreu_em",
-        target_id: eventWizardPlace.value,
-        notes: ""
-      });
-    }
-
     const selectedParticipants = Array.from(
       eventWizardParticipants.selectedOptions
     ).map((option) => option.value);
 
-    for (const participantId of selectedParticipants) {
-      await ensureRelation({
-        source_id: participantId,
-        relation_type_key: "participou_de",
-        target_id: eventEntity.id,
-        notes: ""
-      });
-    }
-
-    const citation = eventWizardCitation.value.trim();
-    const notes = eventWizardNotes.value.trim();
-
-    if (citation || notes) {
-      await ensureSource({
-        source_type: "biblical",
-        citation,
-        reference: title,
-        notes,
-        related_entity_ids: eventEntity.id
-      });
-    }
+    const eventEntity = await createOrUpdateEventFromWizard({
+      title,
+      subtype: eventWizardSubtype.value.trim(),
+      start_year: eventWizardStartYear.value,
+      end_year: eventWizardEndYear.value,
+      place_id: eventWizardPlace.value,
+      participant_ids: selectedParticipants,
+      citation: eventWizardCitation.value.trim(),
+      notes: eventWizardNotes.value.trim()
+    });
 
     eventWizardForm.reset();
 
     await renderEntities();
     await populateSelects();
     await populateEventWizardSelects();
+    await populatePersonWizardSelects();
     await renderTimeSpans();
     await renderRelations();
     await renderTimeline();
@@ -2013,90 +2150,106 @@ async function handleEventWizardSubmit(event) {
     setEventWizardStatus(`Acontecimento salvo: ${eventEntity.name}`);
   } catch (error) {
     console.error("Erro no assistente de acontecimento:", error);
-    setEventWizardStatus("Erro ao criar acontecimento. Veja o console.");
+    setEventWizardStatus(error.message || "Erro ao criar acontecimento. Veja o console.");
   }
 }
 
-async function ensureEventEntity({ name, subtype = "" }) {
-  const entities = await listEntities();
 
-  const existing = entities.find((entity) => {
-    return (
-      entity.type === "event" &&
-      normalizeText(entity.name) === normalizeText(name)
-    );
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return createEntity({
-    type: "event",
-    subtype,
-    name,
-    summary: "",
-    tags: "acontecimento"
-  });
-}
-
-async function ensureTimeSpan(data) {
-  const timeSpans = await listTimeSpans();
-
-  const existing = timeSpans.find((ts) => {
-    return (
-      ts.entity_id === data.entity_id &&
-      ts.kind === data.kind &&
-      String(ts.start_year || "") === String(data.start_year || "") &&
-      String(ts.end_year || "") === String(data.end_year || "")
-    );
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return createTimeSpan(data);
-}
-
-async function ensureRelation(data) {
-  const relations = await listRelations();
-
-  const existing = relations.find((rel) => {
-    return (
-      rel.source_id === data.source_id &&
-      rel.relation_type_key === data.relation_type_key &&
-      rel.target_id === data.target_id
-    );
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return createRelation(data);
-}
-
-async function ensureSource(data) {
-  const sources = await listSources();
-
-  const existing = sources.find((source) => {
-    return (
-      normalizeText(source.citation) === normalizeText(data.citation) &&
-      String(source.related_entity_ids || "").split("|").includes(data.related_entity_ids)
-    );
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return createSource(data);
-}
 
 function setEventWizardStatus(message) {
   if (eventWizardStatus) {
     eventWizardStatus.textContent = message;
+  } else {
+    console.log(message);
+  }
+}
+
+async function populatePersonWizardSelects() {
+  if (!personWizardFather || !personWizardMother || !personWizardSpouse) return;
+
+  const entities = await listEntities();
+
+  const people = entities.filter((entity) => entity.type === "person");
+
+  fillPersonSelect(personWizardFather, people, "Sem pai selecionado");
+  fillPersonSelect(personWizardMother, people, "Sem mãe selecionada");
+  fillPersonSelect(personWizardSpouse, people, "Sem cônjuge selecionado");
+}
+
+function fillPersonSelect(select, people, emptyLabel) {
+  if (!select) return;
+
+  const currentValue = select.value;
+
+  select.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>`;
+
+  people.forEach((person) => {
+    const option = document.createElement("option");
+    option.value = person.id;
+    option.textContent = formatEntityOption(person);
+    select.appendChild(option);
+  });
+
+  select.value = currentValue;
+}
+
+async function handlePersonWizardSubmit(event) {
+  event.preventDefault();
+
+  const name = personWizardName.value.trim();
+
+  if (!name) {
+    alert("Informe o nome da pessoa.");
+    return;
+  }
+
+  try {
+    setPersonWizardStatus("Processando pessoa...");
+
+    const person = await createOrUpdatePersonFromWizard({
+      name,
+      gender: personWizardGender.value,
+      summary: personWizardSummary.value.trim(),
+      tags: personWizardTags.value.trim(),
+
+      birth_year: personWizardBirthYear.value,
+      birth_date_text: personWizardBirthDateText.value.trim(),
+      birth_place_name: personWizardBirthPlace.value.trim(),
+      birth_approx: personWizardBirthApprox.checked,
+
+      death_year: personWizardDeathYear.value,
+      death_date_text: personWizardDeathDateText.value.trim(),
+      death_place_name: personWizardDeathPlace.value.trim(),
+      death_approx: personWizardDeathApprox.checked,
+
+      father_id: personWizardFather.value,
+      mother_id: personWizardMother.value,
+      spouse_id: personWizardSpouse.value,
+
+      citation: personWizardCitation.value.trim(),
+      source_notes: personWizardSourceNotes.value.trim()
+    });
+
+    personWizardForm.reset();
+
+    await renderEntities();
+    await populateSelects();
+    await populateEventWizardSelects();
+    await populatePersonWizardSelects();
+    await renderTimeSpans();
+    await renderRelations();
+    await renderTimeline();
+
+    setPersonWizardStatus(`Pessoa salva: ${person.name}`);
+  } catch (error) {
+    console.error("Erro no assistente de pessoa:", error);
+    setPersonWizardStatus(error.message || "Erro ao criar pessoa. Veja o console.");
+  }
+}
+
+function setPersonWizardStatus(message) {
+  if (personWizardStatus) {
+    personWizardStatus.textContent = message;
   } else {
     console.log(message);
   }
