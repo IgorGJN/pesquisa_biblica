@@ -442,3 +442,7 @@ button {
 .family-chip:hover {
   background: #d8c1a8;
 }
+
+#eventWizardParticipants {
+  min-height: 120px;
+}

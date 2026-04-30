@@ -31,6 +31,7 @@
       <button data-tab="relations">Relações</button>
       <button data-tab="timeline">Timeline</button>
       <button data-tab="search">Busca</button>
+      <button data-tab="eventWizard">Acontecimento</button>
     </div>
   </header>
 
@@ -272,6 +273,59 @@
 
       <p id="fileStatus" class="backup-status"></p>
     </section>
+
+    <div id="tab-eventWizard" class="hidden">
+  <section class="card">
+    <h2>Assistente de acontecimento</h2>
+
+    <form id="eventWizardForm">
+      <label>
+        Título do acontecimento
+        <input id="eventWizardTitle" required placeholder="Ex: Invasão de Judá pelos babilônios" />
+      </label>
+
+      <label>
+        Subtipo
+        <input id="eventWizardSubtype" placeholder="Ex: invasão, batalha, destruição..." />
+      </label>
+
+      <label>
+        Ano inicial
+        <input id="eventWizardStartYear" type="number" placeholder="Ex: -605" />
+      </label>
+
+      <label>
+        Ano final
+        <input id="eventWizardEndYear" type="number" placeholder="Opcional" />
+      </label>
+
+      <label>
+        Local
+        <select id="eventWizardPlace"></select>
+      </label>
+
+      <label>
+        Participantes
+        <select id="eventWizardParticipants" multiple size="6"></select>
+      </label>
+
+      <label>
+        Fonte / Referência
+        <input id="eventWizardCitation" placeholder="Ex: 2 Reis 24" />
+      </label>
+
+      <label>
+        Observações da fonte
+        <textarea id="eventWizardNotes" rows="3"></textarea>
+      </label>
+
+      <button type="submit" class="primary">Criar acontecimento</button>
+    </form>
+
+    <p id="eventWizardStatus" class="backup-status"></p>
+  </section>
+</div>
+
   </main>
 
   <!-- ========================= -->

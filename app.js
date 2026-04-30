@@ -162,6 +162,20 @@ const tabSearch = document.getElementById("tab-search");
 const globalSearchInput = document.getElementById("globalSearchInput");
 const globalSearchResults = document.getElementById("globalSearchResults");
 
+// ===== CADASTRO RAPIDO
+const tabEventWizard = document.getElementById("tab-eventWizard");
+
+const eventWizardForm = document.getElementById("eventWizardForm");
+const eventWizardTitle = document.getElementById("eventWizardTitle");
+const eventWizardSubtype = document.getElementById("eventWizardSubtype");
+const eventWizardStartYear = document.getElementById("eventWizardStartYear");
+const eventWizardEndYear = document.getElementById("eventWizardEndYear");
+const eventWizardPlace = document.getElementById("eventWizardPlace");
+const eventWizardParticipants = document.getElementById("eventWizardParticipants");
+const eventWizardCitation = document.getElementById("eventWizardCitation");
+const eventWizardNotes = document.getElementById("eventWizardNotes");
+const eventWizardStatus = document.getElementById("eventWizardStatus"); 
+
 // ===== INIT =====
 async function initApp() {
   if (appStarted) return;
@@ -253,6 +267,7 @@ async function initApp() {
     afterImport: async () => {
       await renderEntities();
       await populateSelects();
+      await populateEventWizardSelects();
       await renderTimeSpans();
       await renderRelations();
       await renderTimeline();
@@ -282,6 +297,12 @@ if (relType) {
 if (detailAddChildForm) {
   detailAddChildForm.addEventListener("submit", handleAddChildFromDetail);
 }
+
+if (eventWizardForm) {
+  eventWizardForm.addEventListener("submit", handleEventWizardSubmit);
+}
+
+await populateEventWizardSelects();
 
 }
 
@@ -334,6 +355,7 @@ async function handleSubmit(event) {
 
     await renderEntities();
     await populateSelects();
+    await populateEventWizardSelects();
     await renderTimeSpans();
     await renderRelations();
     await renderTimeline();
@@ -1576,6 +1598,7 @@ async function handleRestore() {
 
     await renderEntities();
     await populateSelects();
+    await populateEventWizardSelects();
     await renderTimeSpans();
     await renderRelations();
     await renderTimeline();
@@ -1655,6 +1678,13 @@ function switchTab(tab) {
   if (tab === "search" && tabSearch) {
   tabSearch.classList.remove("hidden");
 } 
+
+if (tabEventWizard) tabEventWizard.classList.add("hidden");
+
+if (tab === "eventWizard" && tabEventWizard) {
+  tabEventWizard.classList.remove("hidden");
+  populateEventWizardSelects();
+}
 }
 
 // ===== FORMATOS / UTIL =====
@@ -1872,6 +1902,204 @@ function getRelationLabel(rel, relationType, isDirect, entityMap) {
     inverseLabels[rel.relation_type_key] ||
     `relacionado a`
   );
+}
+
+async function populateEventWizardSelects() {
+  if (!eventWizardPlace || !eventWizardParticipants) return;
+
+  const entities = await listEntities();
+
+  const places = entities.filter((entity) => entity.type === "place");
+  const participants = entities.filter((entity) =>
+    ["person", "people_group"].includes(entity.type)
+  );
+
+  eventWizardPlace.innerHTML = `<option value="">Sem local</option>`;
+
+  places.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.textContent = formatEntityOption(entity);
+    eventWizardPlace.appendChild(option);
+  });
+
+  eventWizardParticipants.innerHTML = "";
+
+  participants.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.textContent = formatEntityOption(entity);
+    eventWizardParticipants.appendChild(option);
+  });
+}
+
+async function handleEventWizardSubmit(event) {
+  event.preventDefault();
+
+  const title = eventWizardTitle.value.trim();
+
+  if (!title) {
+    alert("Informe o título do acontecimento.");
+    return;
+  }
+
+  try {
+    setEventWizardStatus("Processando acontecimento...");
+
+    const eventEntity = await ensureEventEntity({
+      name: title,
+      subtype: eventWizardSubtype.value.trim()
+    });
+
+    const startYear = eventWizardStartYear.value;
+    const endYear = eventWizardEndYear.value || eventWizardStartYear.value;
+
+    if (startYear) {
+      await ensureTimeSpan({
+        entity_id: eventEntity.id,
+        kind: "occurrence",
+        label: title,
+        start_year: startYear,
+        end_year: endYear,
+        start_approx: false,
+        end_approx: false
+      });
+    }
+
+    if (eventWizardPlace.value) {
+      await ensureRelation({
+        source_id: eventEntity.id,
+        relation_type_key: "ocorreu_em",
+        target_id: eventWizardPlace.value,
+        notes: ""
+      });
+    }
+
+    const selectedParticipants = Array.from(
+      eventWizardParticipants.selectedOptions
+    ).map((option) => option.value);
+
+    for (const participantId of selectedParticipants) {
+      await ensureRelation({
+        source_id: participantId,
+        relation_type_key: "participou_de",
+        target_id: eventEntity.id,
+        notes: ""
+      });
+    }
+
+    const citation = eventWizardCitation.value.trim();
+    const notes = eventWizardNotes.value.trim();
+
+    if (citation || notes) {
+      await ensureSource({
+        source_type: "biblical",
+        citation,
+        reference: title,
+        notes,
+        related_entity_ids: eventEntity.id
+      });
+    }
+
+    eventWizardForm.reset();
+
+    await renderEntities();
+    await populateSelects();
+    await populateEventWizardSelects();
+    await renderTimeSpans();
+    await renderRelations();
+    await renderTimeline();
+
+    setEventWizardStatus(`Acontecimento salvo: ${eventEntity.name}`);
+  } catch (error) {
+    console.error("Erro no assistente de acontecimento:", error);
+    setEventWizardStatus("Erro ao criar acontecimento. Veja o console.");
+  }
+}
+
+async function ensureEventEntity({ name, subtype = "" }) {
+  const entities = await listEntities();
+
+  const existing = entities.find((entity) => {
+    return (
+      entity.type === "event" &&
+      normalizeText(entity.name) === normalizeText(name)
+    );
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return createEntity({
+    type: "event",
+    subtype,
+    name,
+    summary: "",
+    tags: "acontecimento"
+  });
+}
+
+async function ensureTimeSpan(data) {
+  const timeSpans = await listTimeSpans();
+
+  const existing = timeSpans.find((ts) => {
+    return (
+      ts.entity_id === data.entity_id &&
+      ts.kind === data.kind &&
+      String(ts.start_year || "") === String(data.start_year || "") &&
+      String(ts.end_year || "") === String(data.end_year || "")
+    );
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return createTimeSpan(data);
+}
+
+async function ensureRelation(data) {
+  const relations = await listRelations();
+
+  const existing = relations.find((rel) => {
+    return (
+      rel.source_id === data.source_id &&
+      rel.relation_type_key === data.relation_type_key &&
+      rel.target_id === data.target_id
+    );
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return createRelation(data);
+}
+
+async function ensureSource(data) {
+  const sources = await listSources();
+
+  const existing = sources.find((source) => {
+    return (
+      normalizeText(source.citation) === normalizeText(data.citation) &&
+      String(source.related_entity_ids || "").split("|").includes(data.related_entity_ids)
+    );
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return createSource(data);
+}
+
+function setEventWizardStatus(message) {
+  if (eventWizardStatus) {
+    eventWizardStatus.textContent = message;
+  } else {
+    console.log(message);
+  }
 }
 
 initApp().catch((error) => {
