@@ -3,10 +3,8 @@
 import { listEntities } from "./entityService.js";
 import { listRelations } from "./relationService.js";
 
-const FAMILY_RELATION_TYPES = {
-  CHILD_OF: "filho_de",
-  SPOUSE_OF: "conjuge_de"
-};
+const CHILD_OF = "filho_de";
+const SPOUSE_OF = "conjuge_de";
 
 const DEFAULT_OPTIONS = {
   ancestorDepth: 3,
@@ -18,19 +16,11 @@ export async function buildFamilyGraph(centerEntityId, options = {}) {
   const entities = await listEntities();
   const relations = await listRelations();
 
-  return buildFamilyGraphFromData(centerEntityId, entities, relations, options);
+  return buildFamilyUnionGraphFromData(centerEntityId, entities, relations, options);
 }
 
-export function buildFamilyGraphFromData(
-  centerEntityId,
-  entities,
-  relations,
-  options = {}
-) {
-  const config = {
-    ...DEFAULT_OPTIONS,
-    ...options
-  };
+export function buildFamilyUnionGraphFromData(centerEntityId, entities, relations, options = {}) {
+  const config = { ...DEFAULT_OPTIONS, ...options };
 
   const entityMap = buildEntityMap(entities);
   const centerEntity = entityMap[centerEntityId];
@@ -40,64 +30,71 @@ export function buildFamilyGraphFromData(
       centerEntity: null,
       nodes: [],
       edges: [],
-      elements: []
+      elements: [],
+      warnings: []
     };
   }
 
-  const childOfRelations = relations.filter(
-    (rel) => rel.relation_type_key === FAMILY_RELATION_TYPES.CHILD_OF
-  );
+  const childRelations = relations.filter((rel) => rel.relation_type_key === CHILD_OF);
+  const spouseRelations = relations.filter((rel) => rel.relation_type_key === SPOUSE_OF);
 
-  const spouseRelations = relations.filter(
-    (rel) => rel.relation_type_key === FAMILY_RELATION_TYPES.SPOUSE_OF
-  );
-
-  const nodeIds = new Set();
+  const includedPeople = new Set();
   const generationMap = new Map();
+  const warnings = [];
 
-  addNode(centerEntityId, 0, nodeIds, generationMap);
+  addPerson(centerEntityId, 0, includedPeople, generationMap);
 
   collectAncestors({
     entityId: centerEntityId,
     depth: config.ancestorDepth,
-    currentGeneration: 0,
-    childOfRelations,
+    generation: 0,
+    childRelations,
     spouseRelations,
-    nodeIds,
-    generationMap,
-    includeSpouses: config.includeSpouses
+    includedPeople,
+    generationMap
   });
 
   collectDescendants({
     entityId: centerEntityId,
     depth: config.descendantDepth,
-    currentGeneration: 0,
-    childOfRelations,
+    generation: 0,
+    childRelations,
     spouseRelations,
-    nodeIds,
-    generationMap,
-    includeSpouses: config.includeSpouses
+    includedPeople,
+    generationMap
   });
 
   if (config.includeSpouses) {
-    addSpousesForAllNodes({
-      nodeIds,
+    addSpousesForIncludedPeople({
+      includedPeople,
       generationMap,
       spouseRelations
     });
   }
 
-  const nodes = buildNodes({
-    nodeIds,
-    generationMap,
+  const unions = buildFamilyUnions({
+    includedPeople,
     entityMap,
-    centerEntityId
+    childRelations,
+    spouseRelations,
+    generationMap,
+    warnings
+  });
+
+  const nodes = buildNodes({
+    includedPeople,
+    unions,
+    entityMap,
+    generationMap,
+    centerEntityId,
+    warnings
   });
 
   const edges = buildEdges({
-    nodeIds,
-    childOfRelations,
-    spouseRelations
+    unions,
+    includedPeople,
+    spouseRelations,
+    childRelations
   });
 
   const elements = buildCytoscapeElements(nodes, edges);
@@ -106,77 +103,83 @@ export function buildFamilyGraphFromData(
     centerEntity,
     nodes,
     edges,
-    elements
+    elements,
+    warnings
   };
 }
 
 function buildEntityMap(entities) {
   const map = {};
-
   entities.forEach((entity) => {
     map[entity.id] = entity;
   });
-
   return map;
 }
 
-function addNode(entityId, generation, nodeIds, generationMap) {
+function addPerson(entityId, generation, includedPeople, generationMap) {
   if (!entityId) return;
 
-  nodeIds.add(entityId);
+  includedPeople.add(entityId);
 
   if (!generationMap.has(entityId)) {
     generationMap.set(entityId, generation);
     return;
   }
 
-  const currentGeneration = generationMap.get(entityId);
+  const current = generationMap.get(entityId);
 
-  if (Math.abs(generation) < Math.abs(currentGeneration)) {
+  if (Math.abs(generation) < Math.abs(current)) {
     generationMap.set(entityId, generation);
   }
+}
+
+function getParentsOf(entityId, childRelations) {
+  return childRelations
+    .filter((rel) => rel.source_id === entityId)
+    .map((rel) => rel.target_id);
+}
+
+function getChildrenOf(entityId, childRelations) {
+  return childRelations
+    .filter((rel) => rel.target_id === entityId)
+    .map((rel) => rel.source_id);
+}
+
+function getSpousesOf(entityId, spouseRelations) {
+  return spouseRelations
+    .filter((rel) => rel.source_id === entityId || rel.target_id === entityId)
+    .map((rel) => (rel.source_id === entityId ? rel.target_id : rel.source_id));
 }
 
 function collectAncestors({
   entityId,
   depth,
-  currentGeneration,
-  childOfRelations,
+  generation,
+  childRelations,
   spouseRelations,
-  nodeIds,
-  generationMap,
-  includeSpouses
+  includedPeople,
+  generationMap
 }) {
   if (depth <= 0) return;
 
-  const parentIds = childOfRelations
-    .filter((rel) => rel.source_id === entityId)
-    .map((rel) => rel.target_id);
+  const parentIds = getParentsOf(entityId, childRelations);
 
   parentIds.forEach((parentId) => {
-    const parentGeneration = currentGeneration - 1;
+    const parentGeneration = generation - 1;
+    addPerson(parentId, parentGeneration, includedPeople, generationMap);
 
-    addNode(parentId, parentGeneration, nodeIds, generationMap);
-
-    if (includeSpouses) {
-      addSpousesOfEntity({
-        entityId: parentId,
-        generation: parentGeneration,
-        spouseRelations,
-        nodeIds,
-        generationMap
-      });
-    }
+    getSpousesOf(parentId, spouseRelations).forEach((spouseId) => {
+      addPerson(spouseId, parentGeneration, includedPeople, generationMap);
+    });
 
     collectAncestors({
       entityId: parentId,
       depth: depth - 1,
-      currentGeneration: parentGeneration,
-      childOfRelations,
+      generation: parentGeneration,
+      childRelations,
       spouseRelations,
-      nodeIds,
-      generationMap,
-      includeSpouses
+      includedPeople,
+      generationMap
     });
   });
 }
@@ -184,154 +187,239 @@ function collectAncestors({
 function collectDescendants({
   entityId,
   depth,
-  currentGeneration,
-  childOfRelations,
+  generation,
+  childRelations,
   spouseRelations,
-  nodeIds,
-  generationMap,
-  includeSpouses
+  includedPeople,
+  generationMap
 }) {
   if (depth <= 0) return;
 
-  const childIds = childOfRelations
-    .filter((rel) => rel.target_id === entityId)
-    .map((rel) => rel.source_id);
+  const childIds = getChildrenOf(entityId, childRelations);
 
   childIds.forEach((childId) => {
-    const childGeneration = currentGeneration + 1;
+    const childGeneration = generation + 1;
+    addPerson(childId, childGeneration, includedPeople, generationMap);
 
-    addNode(childId, childGeneration, nodeIds, generationMap);
-
-    if (includeSpouses) {
-      addSpousesOfEntity({
-        entityId: childId,
-        generation: childGeneration,
-        spouseRelations,
-        nodeIds,
-        generationMap
-      });
-    }
+    getSpousesOf(childId, spouseRelations).forEach((spouseId) => {
+      addPerson(spouseId, childGeneration, includedPeople, generationMap);
+    });
 
     collectDescendants({
       entityId: childId,
       depth: depth - 1,
-      currentGeneration: childGeneration,
-      childOfRelations,
+      generation: childGeneration,
+      childRelations,
       spouseRelations,
-      nodeIds,
-      generationMap,
-      includeSpouses
-    });
-  });
-}
-
-function addSpousesForAllNodes({ nodeIds, generationMap, spouseRelations }) {
-  const currentIds = Array.from(nodeIds);
-
-  currentIds.forEach((entityId) => {
-    const generation = generationMap.get(entityId) || 0;
-
-    addSpousesOfEntity({
-      entityId,
-      generation,
-      spouseRelations,
-      nodeIds,
+      includedPeople,
       generationMap
     });
   });
 }
 
-function addSpousesOfEntity({
-  entityId,
-  generation,
-  spouseRelations,
-  nodeIds,
-  generationMap
-}) {
-  const spouseIds = spouseRelations
-    .filter((rel) => rel.source_id === entityId || rel.target_id === entityId)
-    .map((rel) => {
-      return rel.source_id === entityId ? rel.target_id : rel.source_id;
-    });
+function addSpousesForIncludedPeople({ includedPeople, generationMap, spouseRelations }) {
+  Array.from(includedPeople).forEach((personId) => {
+    const generation = generationMap.get(personId) || 0;
 
-  spouseIds.forEach((spouseId) => {
-    addNode(spouseId, generation, nodeIds, generationMap);
+    getSpousesOf(personId, spouseRelations).forEach((spouseId) => {
+      addPerson(spouseId, generation, includedPeople, generationMap);
+    });
   });
 }
 
-function buildNodes({ nodeIds, generationMap, entityMap, centerEntityId }) {
-  return Array.from(nodeIds)
-    .map((entityId) => {
-      const entity = entityMap[entityId];
+function buildFamilyUnions({
+  includedPeople,
+  entityMap,
+  childRelations,
+  spouseRelations,
+  generationMap,
+  warnings
+}) {
+  const unions = [];
+  const unionMap = new Map();
 
-      if (!entity || entity.type !== "person") {
-        return null;
-      }
+  spouseRelations.forEach((rel) => {
+    const a = rel.source_id;
+    const b = rel.target_id;
 
-      const generation = generationMap.get(entityId) || 0;
+    if (!includedPeople.has(a) && !includedPeople.has(b)) return;
 
-      return {
-        id: entity.id,
-        label: entity.name || "Sem nome",
-        type: entity.type,
-        subtype: entity.subtype || "",
-        generation,
-        isCenter: entity.id === centerEntityId,
-        entity
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      if (a.generation !== b.generation) {
-        return a.generation - b.generation;
-      }
+    includedPeople.add(a);
+    includedPeople.add(b);
 
-      return String(a.label).localeCompare(String(b.label));
-    });
-}
+    const key = makePairKey(a, b);
 
-function buildEdges({ nodeIds, childOfRelations, spouseRelations }) {
-  const edges = [];
+    if (!unionMap.has(key)) {
+      unionMap.set(key, {
+        id: `union_${key}`,
+        partnerA: a,
+        partnerB: b,
+        children: [],
+        generation: Math.min(
+          generationMap.get(a) ?? 0,
+          generationMap.get(b) ?? 0
+        )
+      });
+    }
+  });
 
-  childOfRelations.forEach((rel) => {
+  childRelations.forEach((rel) => {
     const childId = rel.source_id;
     const parentId = rel.target_id;
 
-    if (!nodeIds.has(childId) || !nodeIds.has(parentId)) return;
+    if (!includedPeople.has(childId) && !includedPeople.has(parentId)) return;
 
-    edges.push({
-      id: `edge_child_${rel.id}`,
-      source: parentId,
-      target: childId,
-      relationId: rel.id,
-      relationType: FAMILY_RELATION_TYPES.CHILD_OF,
-      label: "pai/mãe de",
-      kind: "parent_child"
+    const parentSpouses = getSpousesOf(parentId, spouseRelations);
+    const childParentIds = getParentsOf(childId, childRelations);
+
+    const otherParentId =
+      childParentIds.find((id) => id !== parentId && parentSpouses.includes(id)) ||
+      childParentIds.find((id) => id !== parentId) ||
+      "";
+
+    const unionKey = otherParentId
+      ? makePairKey(parentId, otherParentId)
+      : `single_${parentId}`;
+
+    if (!unionMap.has(unionKey)) {
+      unionMap.set(unionKey, {
+        id: `union_${unionKey}`,
+        partnerA: parentId,
+        partnerB: otherParentId,
+        children: [],
+        generation: generationMap.get(parentId) ?? 0
+      });
+    }
+
+    const union = unionMap.get(unionKey);
+
+    if (!union.children.includes(childId)) {
+      union.children.push(childId);
+    }
+
+    includedPeople.add(parentId);
+    includedPeople.add(childId);
+
+    if (otherParentId) includedPeople.add(otherParentId);
+  });
+
+  unionMap.forEach((union) => {
+    if (!union.partnerA && !union.partnerB) return;
+
+    detectUnionWarnings(union, warnings);
+
+    unions.push(union);
+  });
+
+  return unions;
+}
+
+function detectUnionWarnings(union, warnings) {
+  const partners = [union.partnerA, union.partnerB].filter(Boolean);
+
+  union.children.forEach((childId) => {
+    if (partners.includes(childId)) {
+      warnings.push({
+        type: "invalid_family_cycle",
+        entityId: childId,
+        unionId: union.id,
+        message: "Pessoa aparece como filho e cônjuge/pai-mãe na mesma união."
+      });
+    }
+  });
+}
+
+function makePairKey(a, b) {
+  return [a, b].filter(Boolean).sort().join("__");
+}
+
+function buildNodes({
+  includedPeople,
+  unions,
+  entityMap,
+  generationMap,
+  centerEntityId,
+  warnings
+}) {
+  const duplicateCounts = new Map();
+
+  unions.forEach((union) => {
+    [union.partnerA, union.partnerB, ...union.children].filter(Boolean).forEach((id) => {
+      duplicateCounts.set(id, (duplicateCounts.get(id) || 0) + 1);
     });
   });
 
-  const spouseEdgeKeys = new Set();
+  const personNodes = Array.from(includedPeople)
+    .map((id) => {
+      const entity = entityMap[id];
+      if (!entity || entity.type !== "person") return null;
 
-  spouseRelations.forEach((rel) => {
-    const sourceId = rel.source_id;
-    const targetId = rel.target_id;
+      const hasWarning = warnings.some((warning) => warning.entityId === id);
+      const appearsMultipleTimes = (duplicateCounts.get(id) || 0) > 2;
 
-    if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) return;
+      return {
+        id,
+        type: "person",
+        label: entity.name || "Sem nome",
+        subtype: entity.subtype || "",
+        generation: generationMap.get(id) || 0,
+        isCenter: id === centerEntityId,
+        hasWarning,
+        isDuplicateLike: appearsMultipleTimes,
+        entity
+      };
+    })
+    .filter(Boolean);
 
-    const sortedIds = [sourceId, targetId].sort();
-    const edgeKey = sortedIds.join("__");
+  const unionNodes = unions.map((union, index) => ({
+    id: union.id,
+    type: "family_union",
+    label: "",
+    generation: union.generation + 0.5,
+    orderIndex: index,
+    partnerA: union.partnerA,
+    partnerB: union.partnerB,
+    children: union.children
+  }));
 
-    if (spouseEdgeKeys.has(edgeKey)) return;
-    spouseEdgeKeys.add(edgeKey);
+  return [...personNodes, ...unionNodes];
+}
 
-    edges.push({
-      id: `edge_spouse_${rel.id}`,
-      source: sourceId,
-      target: targetId,
-      relationId: rel.id,
-      relationType: FAMILY_RELATION_TYPES.SPOUSE_OF,
-      label: "cônjuge de",
-      kind: "spouse"
+function buildEdges({ unions, includedPeople }) {
+  const edges = [];
+
+  unions.forEach((union) => {
+    if (union.partnerA && includedPeople.has(union.partnerA)) {
+      edges.push({
+        id: `edge_${union.id}_${union.partnerA}`,
+        source: union.partnerA,
+        target: union.id,
+        kind: "partner",
+        label: ""
+      });
+    }
+
+    if (union.partnerB && includedPeople.has(union.partnerB)) {
+      edges.push({
+        id: `edge_${union.id}_${union.partnerB}`,
+        source: union.id,
+        target: union.partnerB,
+        kind: "partner",
+        label: ""
+      });
+    }
+
+    union.children.forEach((childId) => {
+      if (!includedPeople.has(childId)) return;
+
+      edges.push({
+        id: `edge_${union.id}_${childId}`,
+        source: union.id,
+        target: childId,
+        kind: "child",
+        label: "",
+        motherId: union.partnerB || ""
+      });
     });
   });
 
@@ -340,11 +428,28 @@ function buildEdges({ nodeIds, childOfRelations, spouseRelations }) {
 
 export function buildCytoscapeElements(nodes, edges) {
   const nodeElements = nodes.map((node) => {
+    if (node.type === "family_union") {
+      return {
+        group: "nodes",
+        data: {
+          id: node.id,
+          type: node.type,
+          generation: node.generation,
+          partnerA: node.partnerA,
+          partnerB: node.partnerB,
+          children: node.children
+        },
+        classes: "family-union-node"
+      };
+    }
+
     const classes = [
       "person-node",
       node.isCenter ? "center-node" : "",
       node.subtype === "male" ? "male-node" : "",
-      node.subtype === "female" ? "female-node" : ""
+      node.subtype === "female" ? "female-node" : "",
+      node.hasWarning ? "warning-node" : "",
+      node.isDuplicateLike ? "duplicate-node" : ""
     ]
       .filter(Boolean)
       .join(" ");
@@ -357,32 +462,26 @@ export function buildCytoscapeElements(nodes, edges) {
         type: node.type,
         subtype: node.subtype,
         generation: node.generation,
-        isCenter: node.isCenter
+        isCenter: node.isCenter,
+        hasWarning: node.hasWarning,
+        isDuplicateLike: node.isDuplicateLike
       },
       classes
     };
   });
 
-  const edgeElements = edges.map((edge) => {
-    const classes =
-      edge.kind === "spouse"
-        ? "spouse-edge"
-        : "parent-child-edge";
-
-    return {
-      group: "edges",
-      data: {
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.label,
-        relationId: edge.relationId,
-        relationType: edge.relationType,
-        kind: edge.kind
-      },
-      classes
-    };
-  });
+  const edgeElements = edges.map((edge) => ({
+    group: "edges",
+    data: {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      kind: edge.kind,
+      label: edge.label || "",
+      motherId: edge.motherId || ""
+    },
+    classes: edge.kind === "child" ? "child-edge" : "partner-edge"
+  }));
 
   return [...nodeElements, ...edgeElements];
 }

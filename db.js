@@ -202,32 +202,22 @@ export async function clearStore(storeName) {
 }
 
 export async function exportBackup() {
-  return {
-    entities: await getAllRecords(STORES.entities, true),
-    time_spans: await getAllRecords(STORES.time_spans, true),
-    relations: await getAllRecords(STORES.relations, true),
-    relation_types: await getAllRecords(STORES.relation_types, true),
-    sources: await getAllRecords(STORES.sources, true),
-    sync_log: await getAllRecords(STORES.sync_log, true),
-    settings: await getAllRecords(STORES.settings, true)
-  };
+  const data = {};
+
+  for (const storeName of Object.values(STORES)) {
+    data[storeName] = await getAllRecords(storeName, true);
+  }
+
+  return data;
 }
 
 export async function restoreBackup(data) {
-  const storesToRestore = [
-    STORES.entities,
-    STORES.time_spans,
-    STORES.relations,
-    STORES.relation_types,
-    STORES.sources,
-    STORES.sync_log,
-    STORES.settings
-  ];
+  const normalizedData = data?.data || data || {};
 
-  for (const storeName of storesToRestore) {
+  for (const storeName of Object.values(STORES)) {
     await clearStore(storeName);
 
-    const records = data[storeName] || [];
+    const records = normalizedData[storeName] || [];
 
     for (const record of records) {
       await putRecord(storeName, record);

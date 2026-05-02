@@ -38,11 +38,13 @@ async function exportJson(status) {
     const data = await exportBackup();
 
     const payload = {
-      exported_at: new Date().toISOString(),
-      app_version: "0.1.0",
-      payload_version: "1",
-      data
-    };
+  exported_at: new Date().toISOString(),
+  app_version: "0.14.7",
+  payload_version: "2",
+  backup_type: "indexeddb_full",
+  stores: Object.keys(data),
+  data
+};
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json"

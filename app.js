@@ -54,7 +54,11 @@ import { createOrUpdateEventFromWizard } from "./eventService.js";
 
 import { createOrUpdatePersonFromWizard } from "./personService.js";
 
-import { renderFamilyGraphView } from "./graphView.js";
+import {
+  renderFamilyGraphView,
+  fitCurrentGraph,
+  destroyCurrentGraph
+} from "./graphView.js";
 
 const DEFAULT_APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwZaZy20etEXXhryfSSnLKKoQn_yTL_bKqyUyCMhYBspJ4TmWxgWzcO4Rrm9vqGY7o-/exec";
@@ -233,6 +237,8 @@ const refreshDetailGraph = document.getElementById("refreshDetailGraph");
 const graphAncestorDepth = document.getElementById("graphAncestorDepth");
 const graphDescendantDepth = document.getElementById("graphDescendantDepth");
 
+const fitDetailGraph = document.getElementById("fitDetailGraph");
+
 // ===== INIT =====
 async function initApp() {
   if (appStarted) return;
@@ -396,6 +402,12 @@ if (graphAncestorDepth) {
 
 if (graphDescendantDepth) {
   graphDescendantDepth.addEventListener("change", renderCurrentDetailGraph);
+}
+
+if (fitDetailGraph) {
+  fitDetailGraph.addEventListener("click", () => {
+    fitCurrentGraph();
+  });
 }
 
 
@@ -980,6 +992,7 @@ async function openEntityDetail(entityId) {
   if (!entity) return;
 
   entityDetailModal.classList.remove("hidden");
+  destroyCurrentGraph();
   switchDetailTab("summary");
 
   detailName.textContent = entity.name || "Sem nome";
@@ -1254,19 +1267,22 @@ async function renderCurrentDetailGraph() {
   const descendantDepth = Number(graphDescendantDepth?.value || 3);
 
   await renderFamilyGraphView({
-    container: detailGraphContainer,
-    entityId,
-    ancestorDepth,
-    descendantDepth,
-    includeSpouses: true,
-    onNodeClick: async (clickedEntityId) => {
-      await openEntityDetail(clickedEntityId);
-    }
-  });
+  container: detailGraphContainer,
+  entityId,
+  ancestorDepth,
+  descendantDepth,
+  includeSpouses: true,
+  onNodeClick: async (clickedEntityId) => {
+    await openEntityDetail(clickedEntityId);
+    switchDetailTab("graph");
+  }
+});
 }
 
 
 function closeEntityDetail() {
+  destroyCurrentGraph();
+
   if (entityDetailModal) {
     entityDetailModal.classList.add("hidden");
   }
